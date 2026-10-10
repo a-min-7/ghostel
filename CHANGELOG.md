@@ -11,6 +11,12 @@ All notable changes to this project will be documented in this file.
   install left the warning in `*Warnings*`.  The interactive entry
   points still install the module via `ghostel-module-auto-install`.
 
+### Fixed
+- Looping deletion commands such as `delete-indentation` no longer hang
+  Emacs in live terminal-input modes.  A foreign deletion of rendered
+  text is repaired by one full redraw after the command ends, and
+  insertions made while that repair is pending are dropped with it.
+
 ## [0.57.0] — 2026-10-09
 
 ### Added
