@@ -27,8 +27,8 @@ keyboard and graphics protocols, rich underline styles, OSC 8 hyperlinks, OSC
 4/10/11 color queries, and synchronized output (DEC 2026) - none of which
 libvterm supports.  See [[#ghostel-vs-vterm][Ghostel vs vterm and eat]] for a detailed comparison.
 
-The native module is downloaded automatically on first use, so no toolchain is
-required for the common case.  Open a terminal with =M-x ghostel=.
+On first use Ghostel offers to download a pre-built native module, so no
+toolchain is required for the common case.  Open a terminal with =M-x ghostel=.
 
 #+toc: headlines 8
 
@@ -44,7 +44,7 @@ required for the common case.  Open a terminal with =M-x ghostel=.
   :bind (("C-x m" . ghostel)
          :map ghostel-semi-char-mode-map
          ("C-s"  . consult-line)
-         ("M-<backspace>" . ghostel-backward-kill-word)
+         ("C-k"  . my/ghostel-send-C-k-and-kill)
          ;; ;; I'm used to go up/down the shell history with M-n/p from eshell
          ;; ;; Simulate this behavior in ghostel by sending C-p and C-n
          ("M-p" . (lambda () (interactive) (ghostel-send-key "p" "ctrl")))
@@ -53,7 +53,7 @@ required for the common case.  Open a terminal with =M-x ghostel=.
          ("m" . ghostel-project)
          ("M" . ghostel-project-list-buffers))
   :config
-  (defun ghostel-send-C-k-and-kill ()
+  (defun my/ghostel-send-C-k-and-kill ()
     "Send `C-k' to ghostel.
 Like normal Emacs `C-k'.  Kill to end of line and put content in kill-ring."
     (interactive)
@@ -87,9 +87,8 @@ If you are an evil user you can install the [[https://melpa.org/#/evil-ghostel][
 
 ** Shell integration at a glance
 
-Directory tracking and prompt navigation are automatically on by default for
-local bash, zsh, or fish sessions.  See [[#shell-integration][shell integration]] for TRAMP support and
-more.
+Directory tracking and prompt navigation are on by default for local bash, zsh,
+fish, or nushell sessions.  See [[#shell-integration][shell integration]] for TRAMP support and more.
 
 To call Emacs functions from your shell you have to add them to the
 =ghostel-eval-cmds= whitelist and then add something like this to your bashrc:
@@ -130,7 +129,7 @@ output nothing "scrolls away" while you try to select something.  *emacs mode* i
 picked by =ghostel-readonly-default-mode=, =copy= by default - and exits it
 again when pressed inside copy or Emacs mode.
 
-Those read-only modes have =ghostel-readonly-fast-exit= enabled by default (it defaults to =t=),
+Those read-only modes have =ghostel-readonly-fast-exit= enabled by default,
 which automatically exits them on most keys that you expect to be sent to the
 terminal.  This makes for seamless transitions: say you have some output running
 and see something you want to copy - you press =C-c C-t= to enter copy mode,
@@ -150,8 +149,8 @@ mark.
 - Emacs 28.1+ with dynamic module support
 - macOS, Linux, FreeBSD, Android/Termux, or native Windows
 
-The native module is *automatically downloaded* on first use.  Pre-built
-binaries are available for:
+On first use, Ghostel offers to *download a pre-built native module* or to
+compile one (see [[#native-module][Native module]]).  Pre-built binaries are available for:
 
 - =aarch64-macos= (Apple Silicon)
 - =x86_64-macos= (Intel Mac)
@@ -345,7 +344,7 @@ regenerate it via =make regen-terminfo= after bumping libghostty.
 * Shell integration
 :properties:
 :custom_id: shell-integration
-:description: Automatic OSC injection for bash, zsh, and fish
+:description: Automatic OSC injection for bash, zsh, fish, and nushell
 :end:
 #+cindex: shell integration
 
@@ -402,9 +401,9 @@ Remote (TRAMP / outbound =ssh=) shell integration has its own setup; see [[#tram
 :end:
 #+cindex: input modes
 
-Ghostel offers five eat.el-style input modes.  You enter a ghostel buffer in
-*semi-char mode*; switch modes with the key bindings below and watch
-=mode-line-process= for the current mode indicator.
+Ghostel offers five eat.el-style input modes.  A new terminal starts in
+*semi-char mode* (=ghostel-initial-input-mode=); switch modes with the key
+bindings below and watch =mode-line-process= for the current mode indicator.
 
 | Mode      | Indicator | Terminal | Input handling                              |
 |-----------+-----------+----------+---------------------------------------------|
@@ -422,7 +421,7 @@ Available from every mode except char mode:
 |---------+-------------------------------------------|
 | =C-c C-j= | Switch to semi-char mode (universal exit) |
 | =C-c M-d= | Switch to char mode                       |
-| =C-c C-e= | Switch to Emacs mode                      |
+| =C-c C-e= | Toggle Emacs mode                         |
 | =C-c C-t= | Toggle copy mode                          |
 | =C-c C-l= | Switch to line mode                       |
 | =M-RET=   | Char mode only: return to semi-char       |
@@ -446,7 +445,7 @@ Most keys are sent to the terminal.  Keys in =ghostel-keymap-exceptions=
 | =C-y=                | Yank from kill ring (bracketed paste)      |
 | =M-y=                | Yank-pop (cycle through kill ring)         |
 | =C-c C-y=            | Paste from kill ring                       |
-| =C-c M-l=            | Clear scrollback                           |
+| =C-c M-l=            | Clear screen and scrollback                |
 | =C-c C-n=            | Jump to next hyperlink                     |
 | =C-c C-p=            | Jump to previous hyperlink                 |
 | =C-c M-n=            | Enter read-only mode, jump to next prompt  |
@@ -566,19 +565,19 @@ The same protection exists for keyboard selections: when a command activates
 the mark in semi-char mode - =C-SPC= (=set-mark-command=), an expand-region
 variant, =C-x h=, anything that turns the region on - ghostel switches to the
 input mode picked by =ghostel-mark-activation-input-mode= (=default= follows
-=ghostel-readonly-default-mode=; =copy=, =emacs=, or =nil= to stay in semi-char).  This hooks mark activation rather than
-any particular key, so custom bindings like =set-mark-or-expand= trigger it
-too.  Note that on a TTY Ctrl+Space is indistinguishable from =C-@= (NUL) and
-is forwarded to the terminal instead; in char mode Ctrl+Space always reaches
-the terminal as NUL (GUI and TTY alike).
+=ghostel-readonly-default-mode=; =copy=, =emacs=, or =nil= to stay in semi-char).
+This hooks mark activation rather than any particular key, so custom bindings
+like =set-mark-or-expand= trigger it too.  Note that on a TTY Ctrl+Space is
+indistinguishable from =C-@= (NUL) and is forwarded to the terminal instead; in
+char mode Ctrl+Space always reaches the terminal as NUL (GUI and TTY alike).
 
 The same applies when a command merely *moves point* off the live input point
 without selecting anything.  =isearch= (via =isearch-mode-end-hook=) and
 minibuffer commands like =consult-line= (via =minibuffer-exit-hook=) switch to
 the mode picked by =ghostel-point-leave-input-mode= (=default= follows
 =ghostel-readonly-default-mode=; =copy=, =emacs=, or =nil= to disable), so the
-position is frozen and the content is
-navigable instead of the next redraw yanking point back to the prompt.
+position is frozen and the content is navigable instead of the next redraw
+yanking point back to the prompt.
 
 Other jump packages have no built-in hook, so wire them up with the command
 =ghostel-maybe-leave-input=.  It is a no-op unless, in semi-char mode, point has
@@ -589,7 +588,7 @@ It ignores its arguments, so it serves as both a hook function and =:after= advi
 ;; A package that runs a hook after jumping (e.g. flash):
 (add-hook 'flash-after-jump-hook #'ghostel-maybe-leave-input)
 
-;; A package without one (e.g. avy) — advise its jump action:
+;; A package without one (e.g. avy) - advise its jump action:
 (with-eval-after-load 'avy
   (advice-add 'avy-action-goto :after #'ghostel-maybe-leave-input))
 #+end_src
@@ -725,7 +724,7 @@ APIs are shared by both paths.
 
 Ghostel buffers work with Emacs's built-in bookmarks.  =bookmark-set= (=C-x r
 m=) records the terminal's working directory and buffer name; =bookmark-jump=
-(=C-x r b=) reopens it — reusing a live ghostel buffer of that name, or starting
+(=C-x r b=) reopens it - reusing a live ghostel buffer of that name, or starting
 a fresh shell in the bookmarked directory when none exists.  Bookmarks capture
 the directory and name only (not scrollback or session contents), matching
 vterm.
@@ -863,17 +862,18 @@ slave tty is in canonical mode with echo off, read via a small =tcgetattr= Zig
 binding.  This catches local programs that flip =!ECHO= (sudo, ssh's own prompt,
 gpg, ...).  A cursor-row regex fallback (=ghostel-password-prompt-regex=,
 defaulting to =comint-password-prompt-regexp=) covers cases the tty signal cannot
-see, but runs *only* when the foreground shell is on a remote host
-(=ghostel--remote-shell-p=, derived from the TRAMP =default-directory= ghostel
-keeps in sync via OSC 7).  Gating it on remote-only avoids false positives from
-local raw-mode TUIs like vim or less, and structural anchoring keeps shell-typed
-lines such as =$ echo Password:= from triggering.  See =ghostel-debug-start= /
-=ghostel-debug-password-events-show= for diagnostics.
+see: when the foreground shell is on a remote host (=ghostel--remote-shell-p=,
+derived from the TRAMP =default-directory= ghostel keeps in sync via OSC 7), or
+when the local tty state could not be read.  Not using the regex for local
+shells avoids false positives from local raw-mode TUIs like vim or less, and
+structural anchoring keeps shell-typed lines such as =$ echo Password:= from
+triggering.  See =ghostel-debug-start= / =ghostel-debug-password-events-show=
+for diagnostics.
 
-The mode line shows = 🔒Password= while a prompt is open.  Wrong-password retries are detected automatically (the cursor moves to the new
-prompt row).  The wire copy of the
-password is =clear-string='d immediately after sending, so it does not linger in the
-heap.
+The mode line shows = 🔒Password= while a prompt is open.  Wrong-password
+retries are detected automatically (the cursor moves to the new prompt row).
+The wire copy of the password is =clear-string='d immediately after sending, so
+it does not linger in the heap.
 
 Detection is extensible via =ghostel-password-prompt-functions= - a chain of
 =(ROW) -> string-or-nil= sources tried in order.  The default reads with
@@ -886,7 +886,7 @@ TRAMP-aware =auth-source-pick-first-password= example.
 :custom_id: shell-integration-features
 :end:
 
-- Automatic injection for bash, zsh, and fish - no shell RC edits needed.
+- Automatic injection for bash, zsh, fish, and nushell - no shell RC edits needed.
 - *OSC 7* - directory tracking (=default-directory= follows the shell's cwd,
   TRAMP-aware for remote hosts).
 - *OSC 133* - semantic prompt markers, enabling prompt-to-prompt navigation with
@@ -1140,7 +1140,7 @@ fish) are started as login+interactive shells (=-l -i=) so they source the
 user's rc/profile files, mirroring an interactive =ssh host= login; unrecognized
 shells (e.g. =/bin/sh=) get no args.  This default also applies when remote shell
 integration (see below) is enabled, so your own config still loads alongside it
-— except bash uses =-i= only there, since a login bash ignores the =--rcfile= the
+- except bash uses =-i= only there, since a login bash ignores the =--rcfile= the
 integration relies on.  To override, list the arguments explicitly after
 =FALLBACK=:
 
@@ -1294,7 +1294,7 @@ it.  Nothing persists on the remote.
 
 *** Outbound =ssh= from a local ghostel buffer
 
-The bundled bash/zsh/fish integration shadows =ssh= with a function that:
+The bundled bash/zsh/fish/nushell integration shadows =ssh= with a function that:
 
 1. Resolves the canonical target via =ssh -G= (normalises =ssh_config= aliases).
 2. Looks up the target in =~/.cache/ghostel/ssh-terminfo-cache=.  The cache key
@@ -1411,17 +1411,18 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 
 ** Native module
 
-| Variable                    | Default      | Description                                                                   |
-|-----------------------------+--------------+-------------------------------------------------------------------------------|
-| =ghostel-module-auto-install= | =ask=          | What to do when the native module is missing: =ask=, =download=, =compile=, or =nil=. |
-| =ghostel-module-directory=    | =nil=          | Directory holding the native module (nil = package directory).                |
-| =ghostel-github-release-url=  | =.../releases= | Base URL for pre-built module downloads (customize for a fork/mirror).        |
+| Variable                       | Default       | Description                                                                                            |
+|--------------------------------+---------------+--------------------------------------------------------------------------------------------------------|
+| =ghostel-module-auto-install=    | =ask=           | What to do when the native module is missing at first interactive use: =ask=, =download=, =compile=, or =nil=. |
+| =ghostel-module-directory=       | =nil=           | Directory holding the native module (nil = package directory).                                         |
+| =ghostel-github-release-url=     | =.../releases=  | Base URL for pre-built module downloads (customize for a fork/mirror).                                 |
+| =ghostel-module-compile-command= | =zig build ...= | Shell command run by =ghostel-module-compile=; =%s= is the install prefix.                                 |
 
 ** TRAMP and remote
 
 | Variable                        | Default     | Description                                                                                    |
 |---------------------------------+-------------+------------------------------------------------------------------------------------------------|
-| =ghostel-shell-integration=       | =t=           | Auto-inject shell integration (bash/zsh/fish).                                                 |
+| =ghostel-shell-integration=       | =t=           | Auto-inject shell integration (bash/zsh/fish/nushell).                                         |
 | =ghostel-tramp-shells=            | /(see above)/ | Shell to use per TRAMP method, with =login-shell= auto-detection.                                |
 | =ghostel-tramp-shell-integration= | =nil=         | Auto-inject shell integration for remote TRAMP sessions (=t=, =nil=, or a list of shells).         |
 | =ghostel-tramp-default-method=    | =nil=         | TRAMP method for new remote paths from OSC 7 (nil = =tramp-default-method=).                     |
@@ -1444,10 +1445,10 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 
 ** Images
 
-| Variable                             | Default | Description                                                                               |
-|--------------------------------------+---------+-------------------------------------------------------------------------------------------|
-| =ghostel-kitty-graphics-storage-limit= | 320 MiB | Per-terminal cap on kitty graphics storage.  0 disables kitty graphics entirely.          |
-| =ghostel-kitty-graphics-mediums=       | all       | Image-loading mediums beyond inline base64, subset of =(file temp-file shared-mem)=; nil accepts inline data only. |
+| Variable                             | Default                     | Description                                                                      |
+|--------------------------------------+-----------------------------+----------------------------------------------------------------------------------|
+| =ghostel-kitty-graphics-storage-limit= | 320 MiB                     | Per-terminal cap on kitty graphics storage.  0 disables kitty graphics entirely. |
+| =ghostel-kitty-graphics-mediums=       | =(file temp-file shared-mem)= | Image-loading mediums beyond inline base64; nil accepts inline data only.        |
 
 ** Links, clipboard, and detection
 
@@ -1466,7 +1467,7 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 |-----------------------------------+------------------------------------+--------------------------------------------------------------------------|
 | =ghostel-detect-password-prompts=   | =t=                                  | Watch for password prompts and pop =read-passwd=.                          |
 | =ghostel-password-prompt-functions= | =(ghostel--default-password-source)= | Sources tried in order to obtain a password (prepend auth-source, etc.). |
-| =ghostel-password-prompt-regex=     | =comint-password-prompt-regexp=      | Cursor-row regex fallback (remote shells only).                          |
+| =ghostel-password-prompt-regex=     | =comint-password-prompt-regexp=      | Cursor-row regex fallback (remote shells, or unreadable local tty).      |
 | =ghostel-password-prompt-debounce=  | =0.2=                                | Seconds to wait after a rising edge before opening =read-passwd=.          |
 
 ** Notifications and progress
@@ -1482,6 +1483,8 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 | Variable                             | Default           | Description                                                                                                                                                                                                         |
 |--------------------------------------+-------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | =ghostel-keymap-exceptions=            | =("C-c" "C-x" ...)= | Keys passed through to Emacs in semi-char mode.                                                                                                                                                                     |
+| =ghostel-initial-input-mode=           | =semi-char=         | Input mode a new terminal starts in: =semi-char=, =char=, or =line=.                                                                                                                                                      |
+| =ghostel-tty-escape-delay=             | =0.01=              | Seconds before a bare ESC byte on a TTY frame counts as the escape key; nil keeps it a meta prefix.                                                                                                                 |
 | =ghostel-ignore-cursor-change=         | =nil=               | Ignore terminal-driven cursor shape/visibility changes.                                                                                                                                                             |
 | =ghostel-readonly-fast-exit=           | =t=                 | In copy/Emacs modes, exit on =q=, =C-g=, or any self-insert key.                                                                                                                                                        |
 | =ghostel-readonly-fake-cursor=         | =t=                 | Draw a hint cursor at the live terminal position in copy/Emacs modes.                                                                                                                                               |
@@ -1489,7 +1492,7 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 | =ghostel-mouse-drag-input-mode=        | =default=           | Mode to enter after a click/drag/multi-click selection: =default=, =copy=, =emacs=, or =nil=.                                                                                                                               |
 | =ghostel-mark-activation-input-mode=   | =default=           | Mode to enter when a command activates the mark: =default=, =copy=, =emacs=, or =nil=.                                                                                                                                      |
 | =ghostel-point-leave-input-mode=       | =default=           | Mode to enter when point leaves the input point (isearch/minibuffer): =default=, =copy=, =emacs=, or =nil=.                                                                                                                 |
-| =ghostel-prompt-navigation-input-mode= | =default=           | Mode to enter for prompt navigation (=C-c M-n= / =C-c M-p=, imenu): =default=, =copy=, =emacs=, or =nil=.                                                                                                                     |
+| =ghostel-prompt-navigation-input-mode= | =default=           | Mode to enter for prompt navigation (=C-c M-n= / =C-c M-p=, imenu): =default=, =copy=, =emacs=, or =nil=.                                                                                                                       |
 | =ghostel-word-boundary-string=         | (see docstring)   | Characters that terminate words for double-click selection and word motion (mirrors Ghostty's =selection-word-chars=).  Overridden for printable ASCII by =evil-ghostel-word-boundaries= while =evil-ghostel-mode= is on. |
 | =ghostel-scroll-on-input=              | =t=                 | Jump to the bottom when typing while scrolled into scrollback.                                                                                                                                                      |
 | =ghostel-bold-color=                   | =nil=               | How bold text is colored: =nil=, =bright=, or a =#RRGGBB= string.                                                                                                                                                         |
@@ -1503,6 +1506,7 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 | =ghostel-line-mode-completion-at-point-functions= | =(comint-completion-at-point)= | Capfs activated for line-mode =TAB=.                               |
 | =ghostel-line-mode-use-bash-completion=           | =auto=                         | Layer bash programmable completion onto =TAB= (=auto=, =t=, =nil=).      |
 | =ghostel-line-mode-bash-completion-prespawn=      | =nil=                          | Eagerly start the bash-completion subprocess on line-mode entry. |
+| =ghostel-line-mode-send-functions=                | =nil=                          | Hook run on the input before =RET= sends it; non-nil takes over.   |
 
 * Extensions
 :properties:
@@ -1569,8 +1573,8 @@ When =evil-ghostel-mode= is active:
   as one word, matching Vim's default =iskeyword= (=_= stays a word
   constituent).  Configurable via =evil-ghostel-word-boundaries=; set it to
   =nil= to keep ghostel's path-aware boundaries.  Tradeoff: while active,
-  every syntax-based word command — double-click, =*=, dabbrev, line-mode
-  =M-f=/=M-b= — also sees path components rather than the whole path
+  every syntax-based word command - double-click, =*=, dabbrev, line-mode
+  =M-f=/=M-b= - also sees path components rather than the whole path
   (link clicking, =ghostel-find-file-at-point=, and the whitespace-based
   =W=/=ciW= WORD motions are unaffected), and =ghostel-word-boundary-string=
   only governs non-ASCII characters in these buffers.
@@ -1596,7 +1600,7 @@ Where insert-state ESC goes is controlled by =evil-ghostel-escape=:
 
 The =auto= default keeps ESC working inside vim and friends, but it also
 means that while a fullscreen TUI such as OpenCode (=/tui fullscreen=)
-runs, ESC does /not/ enter normal state — you stay in insert state, and a
+runs, ESC does /not/ enter normal state - you stay in insert state, and a
 leader key like =SPC= goes to the terminal too.  Regular Emacs bindings
 (=M-x=, =C-x ...=, =C-c ...=) keep working.  The first time ESC is routed to
 an alt-screen app this way, a one-time hint in the echo area points at the
@@ -1609,7 +1613,7 @@ otherwise), and from an explicit mode back to =auto=.  Numeric prefixes
 1/2/3 set =auto=/=terminal=/=evil= directly.
 
 =C-c ESC= (=evil-force-normal-state=) switches to normal state once without
-changing the routing — useful to scroll or copy while the TUI keeps ESC.
+changing the routing - useful to scroll or copy while the TUI keeps ESC.
 The binding is on the =<escape>= function key, which exists on GUI frames
 and, on a tty, in terminals speaking the kitty keyboard protocol with
 [[https://github.com/benjaminor/kkp][kkp.el]] enabled; on a legacy tty use =M-x evil-force-normal-state=.
@@ -1936,7 +1940,7 @@ Ghostel bookmarks ([[#bookmarks][Bookmarks]]).
 types the selection into the terminal.  The typed input before the cursor
 pre-fills the minibuffer and is replaced by the selection; the entry is not
 submitted, so it stays editable at the prompt.  The history is retrieved by
-running the shell's entry from =ghostel-shell-history-commands= — bash, zsh,
+running the shell's entry from =ghostel-shell-history-commands= - bash, zsh,
 fish, and nushell work out of the box, and a remote terminal queries the
 remote host.  Users of a history manager can point their shell's entry at it,
 e.g. for [[https://atuin.sh][atuin]]:
@@ -1989,19 +1993,19 @@ Enable it for any Emacs Lisp input method:
 |--------------------------------------+---------------------------------------------------------------------------|
 | =M-x ghostel=                          | Open a new terminal (create a new buffer with a prefix arg).              |
 | =M-x ghostel-project=                  | Open a terminal in the current project root (new buffer with prefix arg). |
-| =M-x ghostel-other=                    | Switch to the next terminal or create one.                                |
+| =M-x ghostel-other=                    | Switch to the most recently used other terminal, or create one.           |
 | =M-x ghostel-next=                     | Cycle to the next ghostel buffer (sorted by name, wraps).                 |
 | =M-x ghostel-previous=                 | Cycle to the previous ghostel buffer.                                     |
 | =M-x ghostel-list-buffers=             | Pick a ghostel buffer via =read-buffer= (candidates show the title).        |
 | =M-x ghostel-project-next=             | Cycle to the next ghostel buffer in the current project.                  |
 | =M-x ghostel-project-previous=         | Cycle to the previous ghostel buffer in the current project.              |
 | =M-x ghostel-project-list-buffers=     | Pick a project-scoped ghostel buffer.                                     |
-| =M-x ghostel-clear=                    | Clear screen and scrollback.                                              |
-| =M-x ghostel-clear-scrollback=         | Clear scrollback only.                                                    |
+| =M-x ghostel-clear=                    | Clear the visible screen, keeping scrollback.                             |
+| =M-x ghostel-clear-scrollback=         | Clear screen and scrollback.                                              |
 | =M-x ghostel-semi-char-mode=           | Switch to semi-char input mode (default).                                 |
 | =M-x ghostel-char-mode=                | Switch to char input mode.                                                |
-| =M-x ghostel-emacs-mode=               | Switch to Emacs input mode (read-only, live).                             |
-| =M-x ghostel-copy-mode=                | Enter copy mode (frozen).                                                 |
+| =M-x ghostel-emacs-mode=               | Toggle Emacs input mode (read-only, live).                                |
+| =M-x ghostel-copy-mode=                | Toggle copy mode (frozen).                                                |
 | =M-x ghostel-readonly-enter=           | Enter the read-only mode picked by =ghostel-readonly-default-mode=.         |
 | =M-x ghostel-line-mode=                | Switch to line input mode.                                                |
 | =M-x ghostel-copy-all=                 | Copy the entire scrollback to the kill ring.                              |
@@ -2110,7 +2114,8 @@ terminals without reaching into internals:
 but always creating a fresh terminal; =ghostel-exec= runs a single program in
 a real TTY with no shell integration.  Both read =default-directory=, and both
 accept an optional IDENTITY alist stored as the buffer's =ghostel-identity=
-for later lookup.
+for later lookup (=ghostel-create= takes a =display-buffer= action as its
+second argument before IDENTITY).
 =ghostel-project-buffer-list= prompts to choose a project when there is no
 current one.
 
@@ -2138,25 +2143,28 @@ Tests use ERT.  The Makefile provides convenient targets:
 
 #+begin_src sh
 make test        # pure Elisp tests (no native module required)
-make all         # build + test + lint
+make all         # build + all tests + lint
 make bench-quick # quick benchmark sanity check
 #+end_src
 
-You can also run tests directly:
+Tests live in per-topic files =test/ghostel-*-test.el=.  To run one file
+directly:
 
 #+begin_src sh
 # Pure Elisp tests (no native module required)
-emacs --batch -Q -L . -l ert -l test/ghostel-test.el -f ghostel-test-run-elisp
+emacs --batch -Q -L lisp -L test -l ert -l test/ghostel-test-helpers.el \
+      -l test/ghostel-osc-test.el -f ghostel-test-run-elisp
 
-# Full test suite (requires the built native module)
-emacs --batch -Q -L . -l ert -l test/ghostel-test.el -f ghostel-test-run
+# Native tests (require the built native module)
+emacs --batch -Q -L lisp -L test -l ert -l test/ghostel-test-helpers.el \
+      -l test/ghostel-osc-test.el -f ghostel-test-run-native
 #+end_src
 
 Tests are split into two groups by ERT tag.  *Elisp tests* (=make test=) have no
 =native= tag and require no Zig module.  *Native tests* (=make test-native=) are
 tagged =native= and require the built module.  Additional targets: =make test-zig=
-(Zig unit tests), =make test-all= (everything), and =make test-evil= (the
-evil-ghostel extension).
+(Zig unit tests), =make test-all= (Elisp + Zig + native), =make test-evil= and
+=make test-consult= (the evil-ghostel and consult-ghostel extensions).
 
 * Performance
 :properties:
@@ -2319,7 +2327,7 @@ while ghostel and vterm trade a compile step for a C/Zig engine.
 |-------------------------------+---------+----------+----------|
 | Native Windows support        | ✅      | ❌       | ❌       |
 | No native module needed       | ❌      | ❌       | ✅       |
-| Auto-download module          | ✅      | ❌       | n/a      |
+| Pre-built module download     | ✅      | ❌       | n/a      |
 |-------------------------------+---------+----------+----------|
 | Scrollback default            | 5 MB    | 1,000 ln | 128 KB   |
 | Default redraw rate           | ~30 fps | ~10 fps  | adaptive |
@@ -2346,8 +2354,8 @@ Sixel images, but none of the Kitty protocols, OSC 8, or desktop notifications.
 
 *Packaging and installation.*  eat's headline advantage is that it is pure Emacs
 Lisp: nothing to compile or download, so it runs anywhere Emacs does - including
-hosts where you cannot build a native module.  Ghostel downloads a prebuilt
-module on first use (or builds it with [[https://ziglang.org/][Zig]]); vterm compiles its single C
+hosts where you cannot build a native module.  Ghostel offers to download a
+prebuilt module on first use (or to build it with [[https://ziglang.org/][Zig]]); vterm compiles its single C
 dependency with CMake on first load.  The native engines are what buy ghostel and
 vterm their large throughput margin over eat.  Ghostel is also the only one of
 the three that runs on native Windows Emacs (via ConPTY, see [[#windows-platform-notes][Platform notes]]):
@@ -2373,9 +2381,9 @@ vterm.  The copy/Emacs split differs too: ghostel and vterm have a copy mode tha
 read-only "Emacs mode" stays *live*.  Ghostel offers both a freezing copy mode and
 a live read-only Emacs mode.
 
-*Shell integration.*  Ghostel auto-injects integration for bash, zsh, and fish -
-no RC changes needed.  vterm and eat both ship integration scripts but require you
-to source them yourself.  All three track the working directory (over TRAMP too)
+*Shell integration.*  Ghostel auto-injects integration for bash, zsh, fish, and
+nushell - no RC changes needed.  vterm and eat both ship integration scripts
+but require you to source them yourself.  All three track the working directory (over TRAMP too)
 and navigate between prompts - ghostel via OSC 133, vterm and eat via their own
 OSC 51-based annotations.  Ghostel and vterm additionally let the shell evaluate
 whitelisted Elisp; eat exposes a fixed set of UI commands rather than arbitrary
@@ -2419,15 +2427,16 @@ Ghostel has a two-layer design: a *Zig native module* (the terminal engine) and
 *Elisp* (Emacs integration).
 
 #+begin_example
-ghostel.el            Elisp: keymap, process management, mode, commands
-src/module.zig        Entry point: emacs_module_init, function registration
-src/GhostelTerm.zig   Terminal state wrapping libghostty-vt (and the native reader)
-src/Renderer.zig      Terminal pages -> Emacs buffer with styled text
-src/input.zig         Key encoding via ghostty encoders
-src/handler.zig       Intercepts OSC actions and routes them to Elisp callbacks
-src/PtyProcess.zig    Native PTY: open master/replica, spawn the child
-src/NativeProcess.zig Background reader thread + event pipe to Emacs
-src/emacs.zig         Zig wrapper for the Emacs module C API
+lisp/ghostel.el          Elisp: keymap, process management, mode, commands
+src/module.zig           Entry point: emacs_module_init, function registration
+src/GhostelTerm.zig      Terminal state wrapping libghostty-vt
+src/Renderer.zig         Terminal pages -> Emacs buffer with styled text
+src/input.zig            Key encoding via ghostty encoders
+src/handler.zig          Intercepts OSC actions and routes them to Elisp callbacks
+src/PosixPtyProcess.zig  Native PTY: open master/replica, spawn the child
+src/ConPtyProcess.zig    Windows counterpart on ConPTY
+src/NativeProcess.zig    Background reader thread + event pipe to Emacs
+src/emacs.zig            Zig wrapper for the Emacs module C API
 #+end_example
 
 The Elisp sources live in =lisp/=, the Zig sources in =src/=, vendored upstream
@@ -2540,8 +2549,9 @@ makes that true while the terminal grid is being rewritten underneath.
 Bug reports, feature requests, and pull requests are welcome on the [[https://github.com/dakra/ghostel][GitHub
 repository]].  When reporting a rendering or interactive-behavior issue, a
 reproducer (the exact command or escape sequence, plus your Emacs version and
-platform) helps a lot.  =M-x ghostel-debug-info= captures diagnostic events that
-are useful to attach.
+platform) helps a lot.  =M-x ghostel-debug-info= collects a diagnostic report
+(environment, module, terminal state, non-default settings) that is useful to
+attach; =M-x ghostel-debug-start= records terminal events for reproducers.
 
 * Changelog
 :properties:
