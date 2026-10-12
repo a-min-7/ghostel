@@ -155,17 +155,25 @@ environment variable (must parse to a positive number).")
       (list (or (getenv "COMSPEC") "cmd.exe") "/s" "/d" "/c" script)
     (list "/bin/sh" "-c" script)))
 
+(defconst ghostel-test--held-marker "GHOSTEL_HELD"
+  "Text a held command prints once its output is complete.
+The command then blocks until it reads a line, keeping the PTY open.")
+
 (defun ghostel-test--env-command ()
-  "Return a command list that prints the process environment."
+  "Return a command list that prints the process environment.
+On POSIX the command is held, see `ghostel-test--held-marker'."
   (if (ghostel-test--windows-p)
       (ghostel-test--shell-command "set")
-    (list (executable-find "env"))))
+    (list "/bin/sh" "-c"
+          (format "env; printf %s; read x" ghostel-test--held-marker))))
 
 (defun ghostel-test--env-done-command ()
-  "Return a shell command that prints the environment and a done marker."
+  "Return a shell command that prints the environment and a done marker.
+On POSIX the command then blocks until it reads a line, keeping the
+PTY open until the test tears it down."
   (if (ghostel-test--windows-p)
       (ghostel-test--shell-command "set & echo GHOSTEL_ENV_DONE")
-    '("/bin/sh" "-c" "env; printf GHOSTEL_ENV_DONE")))
+    '("/bin/sh" "-c" "env; printf GHOSTEL_ENV_DONE; read x")))
 
 (defun ghostel-test--base-process-environment ()
   "Return a small process environment suitable for native spawn tests."

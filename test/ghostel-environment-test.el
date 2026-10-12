@@ -184,7 +184,7 @@ getcwd()-resolved physical one."
                    (ghostel-shell
                     '("/bin/sh" "-c"
                       "printf '\\033]7;file://%s\\033\\\\' \"$PWD\"; \
-env; printf GHOSTEL_ENV_DONE"))
+env; printf GHOSTEL_ENV_DONE; read x"))
                    (ghostel-shell-integration nil)
                    (ghostel-macos-login-shell nil)
                    (ghostel-kill-buffer-on-exit nil)

@@ -40,7 +40,9 @@ returning the number of redraw invalidations requested."
   "Spawn COMMAND through the native primitive and return its output.
 COMMAND is an argv list.  SPAWN-WRAPPER, when non-nil, is called with
 and should call the zero-argument spawn function under any dynamic
-bindings needed by the test."
+bindings needed by the test.  A held COMMAND (one that prints
+`ghostel-test--held-marker' and then reads a line) is released with a
+newline once the marker is on screen."
   (ghostel-test--with-terminal-buffer (buf _term 200 32767 2000000)
     (let* ((exit-status nil)
            (pipe (make-pipe-process
@@ -61,6 +63,14 @@ bindings needed by the test."
               (if spawn-wrapper
                   (funcall spawn-wrapper spawn)
                 (funcall spawn)))
+            (ghostel-test--wait-until
+             (lambda ()
+               (or (not (process-live-p pipe))
+                   (string-match-p ghostel-test--held-marker
+                                   (ghostel-test--terminal-text buf))))
+             pipe 5)
+            (when (process-live-p pipe)
+              (ghostel--write-pty ghostel--term "\n"))
             (ghostel-test--wait-until
              (lambda () (not (process-live-p pipe))) pipe 5)
             (should (eq (current-buffer) buf))
@@ -252,7 +262,6 @@ must not leave `ghostel--event-buf' in a poisoned state."
   "Native env builder mirrors Emacs' DISPLAY fallback for graphical frames."
   :tags '(native)
   (let ((env-command (ghostel-test--env-command)))
-    (skip-unless (car env-command))
     (let* ((process-environment (append '("DISPLAY_FOO=1")
                                         (ghostel-test--base-process-environment)))
            (default-directory (ghostel-test--temp-directory))
@@ -272,7 +281,6 @@ must not leave `ghostel--event-buf' in a poisoned state."
   "Native env builder does not synthesize DISPLAY for non-graphical frames."
   :tags '(native)
   (let ((env-command (ghostel-test--env-command)))
-    (skip-unless (car env-command))
     (let* ((process-environment (ghostel-test--base-process-environment))
            (default-directory (ghostel-test--temp-directory))
            (text (ghostel-test-native-process--command-output
@@ -290,7 +298,6 @@ must not leave `ghostel--event-buf' in a poisoned state."
   "Native env builder follows `process-environment' first-entry semantics."
   :tags '(native)
   (let ((env-command (ghostel-test--env-command)))
-    (skip-unless (car env-command))
     (let* ((process-environment (append '("GHOSTEL_ENV_TEST_UNSET"
                                           "GHOSTEL_ENV_TEST_UNSET=later"
                                           "GHOSTEL_ENV_TEST_DUP=first"
@@ -309,7 +316,6 @@ must not leave `ghostel--event-buf' in a poisoned state."
   "A bare DISPLAY entry suppresses graphical DISPLAY fallback."
   :tags '(native)
   (let ((env-command (ghostel-test--env-command)))
-    (skip-unless (car env-command))
     (let* ((process-environment (cons "DISPLAY"
                                       (ghostel-test--base-process-environment)))
            (default-directory (ghostel-test--temp-directory))
