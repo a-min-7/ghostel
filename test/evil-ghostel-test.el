@@ -2714,6 +2714,18 @@ does not push BEG up to the cursor and collapse the range."
      (evil-ghostel-first-non-blank)
      (should (= 2 (current-column))))))
 
+(ert-deftest evil-ghostel-test-home-is-first-non-blank ()
+  "`<home>' runs the prompt-aware `^' motion; `0' stays column 0."
+  (evil-ghostel-test--with-evil-buffer
+   (dolist (state '(normal visual operator motion))
+     (should (eq #'evil-ghostel-first-non-blank
+                 (lookup-key (evil-get-auxiliary-keymap
+                              evil-ghostel-mode-map state)
+                             [home]))))
+   (evil-normal-state)
+   (should (eq (key-binding [home]) #'evil-ghostel-first-non-blank))
+   (should (eq (key-binding "0") #'evil-beginning-of-line))))
+
 (ert-deftest evil-ghostel-test-replace-count-excludes-soft-wraps ()
   "`r' deletes and re-pastes the same count, excluding soft-wrap newlines.
 A `ghostel-wrap' newline is a renderer line break, not a real input

@@ -877,11 +877,12 @@ rather than forward-delete in the shell."
                   "[["                              #'ghostel-previous-prompt
                   "]]"                              #'ghostel-next-prompt)
 
-;; `^' and `$' are the input-aware edges of the line, reachable in every
-;; state that can take a motion so `d^' / `d$' and visual `^' / `$' stop
-;; at the input boundaries too.  Other basic motions stay vanilla Evil.
+;; `^' / `<home>' and `$' are the input-aware edges of the line, reachable in
+;; every state that can take a motion so `d^' / `d$' and visual `^' / `$' stop
+;; at the input boundaries too.  `0' and other basic motions stay vanilla Evil.
 (evil-define-key* '(normal visual operator motion) evil-ghostel-mode-map
                   [remap evil-first-non-blank]      #'evil-ghostel-first-non-blank
+                  [home]                            #'evil-ghostel-first-non-blank
                   [remap evil-end-of-line]          #'evil-ghostel-end-of-line)
 
 

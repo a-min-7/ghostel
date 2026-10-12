@@ -1555,6 +1555,12 @@ When =evil-ghostel-mode= is active:
 - Pressing *ESC* enters normal state and snaps point to the terminal cursor
   (outside alt-screen; see [[#evil-escape-routing][ESC routing]] below).
 - Normal-mode navigation (=h=, =j=, =k=, =l=, =w=, =b=, =e=, =0=, =$=, ...) works as expected.
+- On a prompt row, =^= and =<home>= jump to the start of the input, after the
+  prompt; =0= goes to column 0.  To make =0= skip the prompt too:
+  #+begin_src emacs-lisp
+  (evil-define-key '(normal visual operator motion) evil-ghostel-mode-map
+    "0" #'evil-ghostel-first-non-blank)
+  #+end_src
 - *Insert/append* (=i=, =a=, =I=, =A=) sync the terminal cursor to point before entering
   insert state.
 - In normal state, prompt jumps (=[[=, =]]=), search, and minibuffer jumps
