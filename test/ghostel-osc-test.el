@@ -10,39 +10,44 @@
 (require 'ghostel-test-helpers)
 
 (ert-deftest ghostel-test-osc52 ()
-  "Test OSC 52 clipboard handling."
+  "Test OSC 52 clipboard handling.
+Each step drains through an OSC 2 title: the OSC 52 effect reaches
+Emacs over the event pipe after the echoed text is already in the terminal,
+so waiting for text would let one step's clipboard write land in the next."
   :tags '(native)
   (ghostel-test--with-pty-matrix backend
     (ghostel-test--with-raw-echo-buffer (buf proc)
-      ;; With osc52 disabled, kill ring should not be modified.
-      (let ((ghostel-enable-osc52 nil)
-            (kill-ring nil))
-        (ghostel--write-pty ghostel--term
-                            "\e]52;c;aGVsbG8=\e\\GHOSTEL_OSC52_DISABLED_DRAIN")
-        (ghostel-test--wait-for-text "GHOSTEL_OSC52_DISABLED_DRAIN" proc 5)
-        (should (equal nil kill-ring)))
+      (cl-flet ((drain (tag)
+                  (ghostel--write-pty ghostel--term (format "\e]2;%s\e\\" tag))
+                  (ghostel-test--wait-until
+                   (lambda () (equal ghostel-title tag)) proc 5)))
+        ;; With osc52 disabled, kill ring should not be modified.
+        (let ((ghostel-enable-osc52 nil)
+              (kill-ring nil))
+          (ghostel--write-pty ghostel--term "\e]52;c;aGVsbG8=\e\\")
+          (drain "osc52-disabled")
+          (should (equal nil kill-ring)))
 
-      ;; With osc52 enabled, text should appear in kill ring.
-      (let ((ghostel-enable-osc52 t)
-            (kill-ring nil))
-        (ghostel--write-pty ghostel--term "\e]52;c;aGVsbG8=\e\\")
-        (ghostel-test--wait-until (lambda () kill-ring) proc 5)
-        (should (equal "hello" (car kill-ring))))
+        ;; With osc52 enabled, text should appear in kill ring.
+        (let ((ghostel-enable-osc52 t)
+              (kill-ring nil))
+          (ghostel--write-pty ghostel--term "\e]52;c;aGVsbG8=\e\\")
+          (drain "osc52-st")
+          (should (equal "hello" (car kill-ring))))
 
-      ;; BEL terminator.
-      (let ((ghostel-enable-osc52 t)
-            (kill-ring nil))
-        (ghostel--write-pty ghostel--term "\e]52;c;d29ybGQ=\a")
-        (ghostel-test--wait-until (lambda () kill-ring) proc 5)
-        (should (equal "world" (car kill-ring))))
+        ;; BEL terminator.
+        (let ((ghostel-enable-osc52 t)
+              (kill-ring nil))
+          (ghostel--write-pty ghostel--term "\e]52;c;d29ybGQ=\a")
+          (drain "osc52-bel")
+          (should (equal "world" (car kill-ring))))
 
-      ;; Query ('?') should be ignored.
-      (let ((ghostel-enable-osc52 t)
-            (kill-ring nil))
-        (ghostel--write-pty ghostel--term
-                            "\e]52;c;?\e\\GHOSTEL_OSC52_QUERY_DRAIN")
-        (ghostel-test--wait-for-text "GHOSTEL_OSC52_QUERY_DRAIN" proc 5)
-        (should (equal nil kill-ring))))))
+        ;; Query ('?') should be ignored.
+        (let ((ghostel-enable-osc52 t)
+              (kill-ring nil))
+          (ghostel--write-pty ghostel--term "\e]52;c;?\e\\")
+          (drain "osc52-query")
+          (should (equal nil kill-ring)))))))
 
 (ert-deftest ghostel-test-osc2-title-tracking ()
   "OSC 2 child output updates title state and title-tracks the buffer name."

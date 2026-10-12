@@ -42,12 +42,17 @@ COMMAND is an argv list.  SPAWN-WRAPPER, when non-nil, is called with
 and should call the zero-argument spawn function under any dynamic
 bindings needed by the test."
   (ghostel-test--with-terminal-buffer (buf _term 200 32767 2000000)
-    (let ((pipe (make-pipe-process
-                 :name "ghostel-native-command-test"
-                 :buffer (current-buffer)
-                 :filter #'ghostel--events-filter
-                 :noquery t))
-          pid)
+    (let* ((exit-status nil)
+           (pipe (make-pipe-process
+                  :name "ghostel-native-command-test"
+                  :buffer (current-buffer)
+                  ;; The reaper's bare exit status ends the event stream.
+                  :filter (lambda (pipe output)
+                            (when (string-match "\\([0-9]+\\)\\'" output)
+                              (setq exit-status (match-string 1 output)))
+                            (ghostel--events-filter pipe output))
+                  :noquery t))
+           pid)
       (unwind-protect
           (progn
             (let ((spawn (lambda ()
@@ -58,7 +63,12 @@ bindings needed by the test."
                 (funcall spawn)))
             (ghostel-test--wait-until
              (lambda () (not (process-live-p pipe))) pipe 5)
-            (ghostel-test--terminal-text))
+            (should (eq (current-buffer) buf))
+            (let ((text (ghostel-test--terminal-text)))
+              (when (string-empty-p text)
+                (ert-fail (format "%s produced no output (exit status %s)"
+                                  command exit-status)))
+              text))
         (when pid
           (ignore-errors (signal-process pid 9)))
         (ignore-errors (ghostel--kill-native-process ghostel--term))
