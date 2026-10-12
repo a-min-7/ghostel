@@ -111,6 +111,14 @@ SPEC is (BUFFER TERM ANCHORED-WINDOW HISTORY-WINDOW)."
     (ghostel--redraw term t)
     (should (ghostel-test-scroll--at-viewport-p))))
 
+(ert-deftest ghostel-test-clear-keeps-scrollback-with-mid-screen-prompt ()
+  "Clearing the screen keeps output even when the prompt is not on the last row."
+  :tags '(native)
+  (ghostel-test-scroll--with-buffer (buf term 10 40 200)
+    (ghostel-test-scroll--write-lines term "keep" 3)
+    (ghostel-clear)
+    (should (ghostel-test--terminal-text-line-p "keep-00"))))
+
 (ert-deftest ghostel-test-redraw-with-new-output-preserves-window-anchor-states ()
   "New output keeps anchored windows at bottom and history windows untouched."
   :tags '(native)

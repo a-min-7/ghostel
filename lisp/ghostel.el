@@ -2079,7 +2079,7 @@ into the terminal shown in the event's window."
   "Clear the visible screen, preserving scrollback history."
   (interactive)
   (when ghostel--term
-    (ghostel--write-vt ghostel--term "\e[H\e[2J")
+    (ghostel--write-vt ghostel--term "\e[H\e[22J")
     (setq ghostel--force-next-redraw t)
     (ghostel--invalidate)
     ;; Send form-feed to the shell so it redraws its prompt.
