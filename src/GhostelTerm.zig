@@ -3,6 +3,7 @@
 /// Holds the resources for one Ghostel terminal, including rendering state
 /// and, for native PTY sessions, the process reader.
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 const emacs = @import("emacs.zig");
@@ -290,6 +291,9 @@ pub fn spawnNativeProcess(
     const initial_size = blk: {
         try self.lock();
         defer self.unlock();
+        // ConPTY keeps its own screen buffer without scrollback, so a resize
+        // that pulled rows back would disagree with it about what is on screen.
+        if (builtin.os.tag == .windows) self.terminal.flags.resize_pull_scrollback = false;
         break :blk self.winSize();
     };
 

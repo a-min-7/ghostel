@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file.
   points still install the module via `ghostel-module-auto-install`.
 
 ### Fixed
+- Windows (ConPTY) resizes no longer pull scrollback rows back into
+  the screen, which left later output on the wrong rows.
 - `C-x C-q` in a running compilation-style `ghostel-compile` buffer
   enters the read-only input mode instead of toggling
   `buffer-read-only` underneath the renderer.
