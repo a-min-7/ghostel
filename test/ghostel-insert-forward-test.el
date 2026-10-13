@@ -226,6 +226,14 @@ This is the seam `ghostel-ime' uses to protect its composition inserts."
     (should (equal (buffer-string) "ㅎ"))
     (should (null sent))))
 
+(ert-deftest ghostel-test-insert-forward-skips-quail-preedit ()
+  "A Quail input method's preedit is not forwarded; only its commit events are."
+  (ghostel-insert-forward-test--with-live-buffer
+    (set-input-method "russian-computer")
+    (should (equal (funcall input-method-function ?a) '(?ф)))
+    (should (null sent))
+    (should (equal (buffer-string) ""))))
+
 (ert-deftest ghostel-test-insert-forward-process-exit-restores-barrier ()
   "After the terminal process dies the buffer is plainly read-only again."
   (ghostel-insert-forward-test--with-live-buffer

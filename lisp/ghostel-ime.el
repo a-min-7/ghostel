@@ -27,9 +27,9 @@
 ;; text by editing the current buffer.  `hangul-input-method' is the common
 ;; example: it calls `self-insert-command' directly for the composed syllable,
 ;; bypassing ghostel's key remapping, so the commit lands in the buffer but is
-;; not sent to the PTY.  Quail-based methods (Japanese, Chinese, ...) use the
-;; buffer for their in-flight preedit the same way, so enable this mode for
-;; any Emacs Lisp input method used in ghostel buffers.
+;; not sent to the PTY.  Quail-based methods return their commits as key
+;; events and need this mode only to protect their in-flight preedit from
+;; redraws.
 ;;
 ;; `ghostel-ime-mode' wraps the buffer-local `input-method-function'.  If the
 ;; input method inserts committed text into the ghostel buffer, the wrapper
@@ -156,9 +156,9 @@ wrapper is back in place before the next key is read."
 
 When enabled, ghostel forwards committed text from Lisp input methods
 that insert directly into the buffer, and defers redraws and insert
-forwarding while a composition is in flight.  Enable it for any Emacs
-Lisp input method (Hangul, Quail-based Japanese/Chinese, ...).  A
-typical setup is:
+forwarding while a composition is in flight.  Required for Hangul and
+other input methods that are not Quail-based; optional for Quail.
+A typical setup is:
 
   (add-hook \='ghostel-mode-hook #\='ghostel-ime-mode)"
   :lighter nil

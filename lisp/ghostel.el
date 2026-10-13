@@ -1794,6 +1794,9 @@ Also suppresses automatic input-mode switching (point-leave, mark-activation).")
 (defun ghostel--forward-inserts-p ()
   "Non-nil when foreign buffer edits should be intercepted."
   (and (ghostel--insert-forwarding-live-p)
+       ;; Quail's preedit; its commit arrives as key events.
+       (not (or (bound-and-true-p quail-translating)
+                (bound-and-true-p quail-converting)))
        (not (run-hook-with-args-until-success
              'ghostel-inhibit-input-forwarding-functions))))
 

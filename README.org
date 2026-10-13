@@ -1964,12 +1964,12 @@ e.g. for [[https://atuin.sh][atuin]]:
 :end:
 #+cindex: input methods
 
-Emacs Lisp input methods compose and commit text by editing the current buffer
+Some Emacs Lisp input methods commit text by editing the current buffer
 instead of returning key events: =hangul-input-method= inserts the composed
-syllable directly, and Quail-based methods (Japanese, Chinese, ...) use the
-buffer for their in-flight preedit as well.  A ghostel buffer is
-terminal-owned, so those edits are either rejected (copy and Emacs modes) or
-picked up by insert forwarding and sent to the PTY mid-composition.
+syllable directly.  A ghostel buffer is terminal-owned, so those commits are
+either rejected (copy and Emacs modes) or forwarded to the PTY mid-composition.
+Quail-based methods (Russian, Japanese, Chinese, ...) return their commits as
+key events and work without extra setup.
 
 =ghostel-ime-mode= is an optional minor mode that wraps the buffer-local
 =input-method-function=.  When the input method commits by buffer insertion, the
@@ -1980,7 +1980,9 @@ composition is in flight it also stands down insert forwarding (via
 (via =ghostel-inhibit-redraw-functions=) so the renderer does not rewrite the
 buffer mid-composition.  GUI native preedit handling is unaffected.
 
-Enable it for any Emacs Lisp input method:
+Enable it for Hangul and other input methods that are not Quail-based.  For
+Quail methods it is optional and keeps the in-flight preedit from being redrawn
+over:
 
 #+begin_src emacs-lisp
 (use-package ghostel-ime
