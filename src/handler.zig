@@ -42,6 +42,7 @@ pub fn GhostelHandler(Effects: type) type {
             self.inner.effects.title_changed = &titleChangedCallback;
             self.inner.effects.size = &sizeCallback;
             self.inner.effects.render_hold = &renderHoldCallback;
+            self.inner.effects.semantic_prompt = &semanticPromptCallback;
             return self;
         }
 
@@ -60,14 +61,6 @@ pub fn GhostelHandler(Effects: type) type {
             value: gt.StreamAction.Value(action),
         ) void {
             switch (action) {
-                // For `semantic_prompt` we forward FIRST so the standard
-                // handler updates terminal state (per-row semantic flag),
-                // then fire the Elisp callback.
-                .semantic_prompt => {
-                    self.inner.vt(action, value);
-                    self.handleSemanticPrompt(value);
-                },
-
                 // Routed to Elisp instead of the standard handler's
                 // pwd tracking, clipboard effects and progress effect.
                 .report_pwd => self.handleReportPwd(value),
@@ -202,28 +195,22 @@ pub fn GhostelHandler(Effects: type) type {
         // OSC 133 — semantic prompt
         // ---------------------------------------------------------------------------
 
-        /// Fire `ghostel--osc133-marker` for the marker types ghostel's
-        /// navigation tracks: A/N (fresh-line prompt), P (explicit prompt start),
-        /// B (end of prompt prefix), C (start of output), D (end of command).
-        ///
-        /// PARAM is the raw options string from the OSC - elisp parses it on
-        /// demand (e.g. `(string-to-number param)` for the 'D' exit code).
-        fn handleSemanticPrompt(self: *Self, sp: gt.osc.Command.SemanticPrompt) void {
-            const marker_char: u8 = switch (sp.action) {
-                .fresh_line_new_prompt, .new_command => 'A',
-                .prompt_start => 'P',
-                .end_prompt_start_input => 'B',
-                .end_input_start_output => 'C',
-                .end_command => 'D',
-                else => return,
-            };
-            const type_str: [1]u8 = .{marker_char};
-            const param_val = if (sp.options_unvalidated.len > 0)
-                sp.options_unvalidated
-            else
-                null;
-
-            self.effects.effect("ghostel--osc133-marker", .{ &type_str, param_val });
+        /// Fire `ghostel--osc133-marker` with the marker letter:
+        /// A (prompt start), B (end of prompt prefix), C (start of output),
+        /// D (end of command, with the exit code or nil).
+        fn semanticPromptCallback(
+            handler: *gt.TerminalStream.Handler,
+            event: gt.TerminalStream.Handler.SemanticPrompt,
+        ) void {
+            const self: *Self = @fieldParentPtr("inner", handler);
+            const marker: [1]u8 = .{switch (event.kind) {
+                .prompt_start => 'A',
+                .input_start => 'B',
+                .output_start => 'C',
+                .command_end => 'D',
+                .invalid => return,
+            }};
+            self.effects.effect("ghostel--osc133-marker", .{ &marker, event.exit_code });
         }
 
         // ---------------------------------------------------------------------------

@@ -25,6 +25,8 @@ All notable changes to this project will be documented in this file.
   admits one redraw even while the next frame is already open.  That
   redraw shows the grid as parsed so far, which may include the start
   of the next frame.
+- An OSC 133 `D` with only key=value options no longer records exit
+  status 0.
 - Windows (ConPTY) resizes no longer pull scrollback rows back into
   the screen, which left later output on the wrong rows.
 - `C-x C-q` in a running compilation-style `ghostel-compile` buffer

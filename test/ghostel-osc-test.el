@@ -1056,13 +1056,13 @@ call.  The OSC 51 scanner this replaces could not handle this case."
           (setq markers nil)
           (ghostel--write-pty ghostel--term "\e]133;D;0\e\\")
           (ghostel-test--wait-until
-           (lambda () (equal "0" (cdr (assoc "D" markers))))
+           (lambda () (equal 0 (cdr (assoc "D" markers))))
            proc 5)
 
           (setq markers nil)
           (ghostel--write-pty ghostel--term "\e]133;D;1\e\\")
           (ghostel-test--wait-until
-           (lambda () (equal "1" (cdr (assoc "D" markers))))
+           (lambda () (equal 1 (cdr (assoc "D" markers))))
            proc 5)
 
           (setq markers nil)
@@ -1071,29 +1071,14 @@ call.  The OSC 51 scanner this replaces could not handle this case."
            (lambda () (and (assoc "A" markers) (assoc "B" markers)))
            proc 5)
 
-          ;; 133;P (explicit prompt start, no fresh-line side effect) — used
-          ;; by the zsh `zle-line-init' fallback and forwarded to elisp the
-          ;; same way as A so prompt navigation keeps working when the
-          ;; PROMPT-wrap was clobbered by a theme.
-          (setq markers nil)
-          (ghostel--write-pty ghostel--term "\e]133;P\e\\")
-          (ghostel-test--wait-until (lambda () (assoc "P" markers)) proc 5)
-          (setq markers nil)
-          (ghostel--write-pty ghostel--term "\e]133;P;k=i\e\\")
-          (ghostel-test--wait-until
-           (lambda () (equal "k=i" (cdr (assoc "P" markers))))
-           proc 5)
-
-          ;; 133;N (new_command) surfaces as A.  Ghostel doesn't track
-          ;; commands by aid, so N uses the same prompt navigation and hooks.
-          (setq markers nil)
-          (ghostel--write-pty ghostel--term "\e]133;N\e\\")
-          (ghostel-test--wait-until (lambda () (assoc "A" markers)) proc 5)
-          (setq markers nil)
-          (ghostel--write-pty ghostel--term "\e]133;N;aid=42\e\\")
-          (ghostel-test--wait-until
-           (lambda () (equal "aid=42" (cdr (assoc "A" markers))))
-           proc 5))))))
+          ;; 133;P and 133;N surface as A: all three start a prompt, and
+          ;; options such as k= or aid= are not forwarded.
+          (dolist (seq '("\e]133;P\e\\" "\e]133;P;k=i\e\\"
+                         "\e]133;N\e\\" "\e]133;N;aid=42\e\\"))
+            (setq markers nil)
+            (ghostel--write-pty ghostel--term seq)
+            (ghostel-test--wait-until (lambda () (assoc "A" markers)) proc 5)
+            (should (equal '("A") (assoc "A" markers)))))))))
 
 (ert-deftest ghostel-test-deferred-vt-effect-restores-current-buffer ()
   "Deferred VT effects run in the buffer that produced the terminal output."
@@ -1120,14 +1105,14 @@ call.  The OSC 51 scanner this replaces could not handle this case."
            (ghostel-command-finish-functions
             (list (lambda (buf exit) (push (cons buf exit) calls)))))
       (ghostel--osc133-marker "A" nil)
-      (ghostel--osc133-marker "D" "0")
+      (ghostel--osc133-marker "D" 0)
       (should (equal 1 (length calls)))
       (should (eq (caar calls) (current-buffer)))
       (should (equal 0 (cdar calls)))
 
       (setq calls nil)
       (ghostel--osc133-marker "A" nil)
-      (ghostel--osc133-marker "D" "2")
+      (ghostel--osc133-marker "D" 2)
       (should (equal 2 (cdar calls)))
 
       ;; Missing param -> exit is nil, hook still fires
@@ -1168,7 +1153,7 @@ author's debugger can fire)."
           (ghostel-command-finish-functions
            (list (lambda (_buf _exit) (error "Boom")))))
       (ghostel--osc133-marker "A" nil)
-      (should-not (condition-case _ (progn (ghostel--osc133-marker "D" "0") nil)
+      (should-not (condition-case _ (progn (ghostel--osc133-marker "D" 0) nil)
                     (error t))))))
 
 (ert-deftest ghostel-test-command-finish-hook-error-isolated ()
@@ -1183,7 +1168,7 @@ bind `debug-on-error' to nil."
              (list (lambda (_buf _exit) (error "First boom"))
                    (lambda (_buf _exit) (setq later-ran t)))))
         (ghostel--osc133-marker "A" nil)
-        (ghostel--osc133-marker "D" "0")
+        (ghostel--osc133-marker "D" 0)
         (should later-ran)))))
 
 (ert-deftest ghostel-test-command-finish-hook-runs-synchronously ()
@@ -1193,7 +1178,7 @@ Downstream consumers (notably `ghostel-compile') depend on it."
   (let ((ran nil))
     (let ((ghostel-command-finish-functions
            (list (lambda (_b _e) (setq ran t)))))
-      (ghostel--osc133-marker "D" "0")
+      (ghostel--osc133-marker "D" 0)
       (should ran))))
 
 (ert-deftest ghostel-test-command-start-hook-runs-synchronously ()

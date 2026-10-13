@@ -549,16 +549,14 @@ Returns nil on failure."
 
 (defun ghostel--osc133-marker (type param)
   "Handle an OSC 133 semantic prompt marker from the Zig module.
-TYPE is a single character string: A, B, C, D, or P.
-PARAM is the exit status string for type D, or nil.
+TYPE is a single character string: A, B, C, or D.
+PARAM is the exit status for type D, or nil.
 Note: the `ghostel-prompt' text property is applied by the native
 render loop (which queries libghostty's per-row semantic state),
 not here.  This handler only tracks prompt positions and exit status."
   (pcase type
-    ((or "A" "P")
-     ;; Prompt start — record line number.  P is the explicit
-     ;; prompt-start marker (no fresh-line side effect); both mark
-     ;; a navigable prompt position.
+    ("A"
+     ;; Prompt start — record line number.
      (push (cons (count-lines (point-min) (point-max)) nil)
            ghostel--prompt-positions)
      ;; No D arrives for a command that replaced the shell (exec zsh).
@@ -571,11 +569,10 @@ not here.  This handler only tracks prompt positions and exit status."
     ("D"
      ;; Command finished — store exit status on the most recent entry
      ;; and notify `ghostel-command-finish-functions'.
-     (let ((exit (and param (string-to-number param))))
-       (when (and ghostel--prompt-positions param)
-         (setcdr (car ghostel--prompt-positions) exit))
-       (ghostel--run-hook-safely 'ghostel-command-finish-functions
-                                 (current-buffer) exit))
+     (when (and ghostel--prompt-positions param)
+       (setcdr (car ghostel--prompt-positions) param))
+     (ghostel--run-hook-safely 'ghostel-command-finish-functions
+                               (current-buffer) param)
      (setq ghostel--command-running nil))))
 
 (defun ghostel--prompt-input-start ()
