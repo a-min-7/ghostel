@@ -10,6 +10,9 @@ All notable changes to this project will be documented in this file.
   input-mode switches.
 
 ### Changed
+- libghostty bumped to ghostty a2e440396 (2026-10-14).  Shell `clear`
+  and `C-l` at a prompt that is not on the last screen row now scroll
+  the screen into scrollback instead of erasing it.
 - Loading `ghostel.el` without the native module no longer logs a
   "Native module not found" warning.  Byte-compiling the package at
   install time loads the file before the module exists, so every fresh
