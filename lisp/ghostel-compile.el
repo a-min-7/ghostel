@@ -74,7 +74,7 @@
 (declare-function ghostel--sync-read-only "ghostel")
 (defvar ghostel--inhibit-insert-forwarding)
 
-
+
 ;;; Customization
 
 (defgroup ghostel-compile nil
@@ -115,7 +115,7 @@ status message string (e.g. \"finished\\n\" or
 `compilation-finish-functions' is also run with the same arguments."
   :type 'hook)
 
-
+
 ;;; Internal variables
 
 (defvar-local ghostel-compile--command nil
@@ -169,6 +169,12 @@ recompile preserves the launch mode.")
     (define-key map "n" #'compilation-next-error)
     (define-key map "p" #'compilation-previous-error)
     (define-key map "g" #'ghostel-recompile)
+    ;; Only while the buffer is still `ghostel-mode' (during the run); the
+    ;; finished compilation buffer keeps plain `read-only-mode'.
+    (define-key map [remap read-only-mode]
+                '(menu-item "" ghostel-readonly-enter
+                            :filter (lambda (cmd)
+                                      (and (derived-mode-p 'ghostel-mode) cmd))))
     map)
   "Keymap for `ghostel-compile-view-mode'.
 Inherits from `compilation-mode-map'; rebinds `n'/`p' to
@@ -177,7 +183,7 @@ just move point through errors without opening the source file
 in another window.  `g' runs `ghostel-recompile' instead of
 `recompile'.  RET still opens the error like in `compilation-mode'.")
 
-
+
 ;;; Helpers
 
 (define-derived-mode ghostel-compile-view-mode
@@ -417,6 +423,8 @@ same as in any compilation buffer."
             (when start
               (ghostel-compile--trim-trailing-blanks start))
             (ghostel-compile--teardown-terminal)
+            ;; Announce an interactive run's read-only flip; the mode switch sets it silently.
+            (ghostel--sync-read-only)
             ;; Owed link detection has to run before the rows are joined,
             ;; whose `ghostel-wrap' properties it reads, and before the mode
             ;; switch drops the queue's buffer-locals.  Demoted because
@@ -535,7 +543,7 @@ same as in any compilation buffer."
           (run-hook-with-args 'ghostel-compile-finish-functions
                               buffer (ghostel-compile--status-message exit)))))))
 
-
+
 ;;; Spawning
 
 (defun ghostel-compile--commit-pending-frame (buffer)
@@ -669,7 +677,7 @@ Returns the process."
     (process-put proc 'adjust-window-size-function #'ignore)
     proc))
 
-
+
 ;;; Buffer management
 
 (defun ghostel-compile--prepare-buffer (name dir &optional interactive)
@@ -805,7 +813,7 @@ the rendered buffer remains read-only in both cases."
                   (make-hash-table :test 'equal :weakness 'value)))
     buffer))
 
-
+
 ;;; Entry points
 
 (defun ghostel-compile--start (command buffer-name dir

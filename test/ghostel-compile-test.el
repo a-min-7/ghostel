@@ -477,6 +477,27 @@ iteration)."
     (should (eq next-error-function #'compilation-next-error-function))
     (should (equal "true" ghostel-compile--command))))          ; state preserved
 
+(ert-deftest ghostel-test-compile-finalize-runs-readonly-change-hook ()
+  "Finalizing a writable interactive run announces the read-only flip once."
+  (ghostel-test--with-compile-buffer buf
+    (setq ghostel-compile--command "true"
+          ghostel-compile--start-time (current-time)
+          ghostel-compile--scan-marker (copy-marker (point-max))
+          ghostel-compile--interactive t
+          buffer-read-only nil)
+    (let* ((calls 0)
+           (ghostel-readonly-change-hook (list (lambda () (cl-incf calls)))))
+      (ghostel-compile--finalize buf 0 (current-time))
+      (should (= calls 1)))))
+
+(ert-deftest ghostel-test-compile-view-map-remaps-read-only-mode-during-run ()
+  "`read-only-mode' is remapped to the read-only input mode only during a run."
+  (ghostel-test--with-compile-buffer buf
+    (use-local-map ghostel-compile-view-mode-map)
+    (should (eq (key-binding (kbd "C-x C-q")) #'ghostel-readonly-enter))
+    (ghostel-compile-view-mode)
+    (should (eq (key-binding (kbd "C-x C-q")) #'read-only-mode))))
+
 (ert-deftest ghostel-test-compile-finalize-drops-terminal-truncate-lines ()
   "The finished buffer follows the user's global `truncate-lines'.
 The terminal needs it t so Emacs adds no continuation lines of its own,

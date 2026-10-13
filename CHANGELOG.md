@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
   points still install the module via `ghostel-module-auto-install`.
 
 ### Fixed
+- `C-x C-q` in a running compilation-style `ghostel-compile` buffer
+  enters the read-only input mode instead of toggling
+  `buffer-read-only` underneath the renderer.
 - Looping deletion commands such as `delete-indentation` no longer hang
   Emacs in live terminal-input modes.  A foreign deletion of rendered
   text is repaired by one full redraw after the command ends, and
