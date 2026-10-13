@@ -1042,6 +1042,9 @@ fn commitResize(self: *Self, env: emacs.Env) !void {
         // an erased one (`rows_in_buffer` 0) maps every position to row 0.
         if (self.rows_in_buffer > 0) self.saved_markers.pin(self.term.screens.active, env);
 
+        // `Terminal.resize` also clears synchronized output; keep the frame
+        // held until the program closes the mode itself.
+        const synchronized = self.term.modes.get(.synchronized_output);
         try self.term.resize(self.alloc, .{
             .cols = rz.cols,
             .rows = rz.rows,
@@ -1050,6 +1053,7 @@ fn commitResize(self: *Self, env: emacs.Env) !void {
                 .height = rz.cell_h,
             },
         });
+        self.term.modes.set(.synchronized_output, synchronized);
         self.pending_resize = null;
 
         env.set("ghostel--term-rows", self.term.rows);

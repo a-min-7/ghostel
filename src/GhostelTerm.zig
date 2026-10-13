@@ -37,6 +37,10 @@ process: ?*NativeProcess = null,
 pty_size: WinSize = .{ .cols = 0, .rows = 0 },
 /// Light/dark as classified by Emacs for `ghostel-default`; reported via CSI 996/997.
 color_scheme: gt.device_status.ColorScheme = .dark,
+/// Synchronized output (mode 2026) closed since the last redraw.  Lets a
+/// redraw through while the mode is open again, so a program that reopens
+/// it within one write never looks frozen.
+frame_completed: bool = false,
 
 /// Create a new terminal with the given dimensions and scrollback.
 pub fn init(
@@ -90,7 +94,8 @@ pub fn redraw(self: *Self, force_full: bool, force_sync: bool) !bool {
 
     const env = emacs.current_env orelse return false;
     const pre_size = .{ self.terminal.cols, self.terminal.rows };
-    if (!try self.renderer.redraw(env, force_full, force_sync)) return false;
+    if (!try self.renderer.redraw(env, force_full, force_sync or self.frame_completed)) return false;
+    self.frame_completed = false;
 
     _ = env.f("ghostel--kitty-clear", .{});
     try kitty_graphics.emitPlacements(env, self);

@@ -41,6 +41,7 @@ pub fn GhostelHandler(Effects: type) type {
             self.inner.effects.device_attributes = &deviceAttributesCallback;
             self.inner.effects.title_changed = &titleChangedCallback;
             self.inner.effects.size = &sizeCallback;
+            self.inner.effects.render_hold = &renderHoldCallback;
             return self;
         }
 
@@ -97,6 +98,12 @@ pub fn GhostelHandler(Effects: type) type {
             const self: *Self = @fieldParentPtr("inner", handler);
             if (data.len == 0) return;
             self.effects.ptyWriteFromTerminal(data);
+        }
+
+        /// Mode 2026 closed: the frame is complete, let the next redraw through.
+        fn renderHoldCallback(handler: *gt.TerminalStream.Handler, held: bool) void {
+            const self: *Self = @fieldParentPtr("inner", handler);
+            if (!held) self.term.frame_completed = true;
         }
 
         /// Called when the terminal receives BEL.

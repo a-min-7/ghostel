@@ -1818,6 +1818,33 @@ closing it - the state of a buffer hidden while a TUI streams a frame."
   (ghostel-test--with-open-sync-output (_buf term)
     (should-not (ghostel--redraw term))))
 
+(ert-deftest ghostel-test-redraw-admitted-after-sync-output-reopens ()
+  "A frame closed and reopened within one write is rendered, not frozen.
+Mode 2026 is still open at redraw time, but a complete frame has been
+produced since the last redraw, so the renderer admits exactly one
+redraw of the grid as parsed so far, next frame's start included, and
+refuses the next."
+  :tags '(native)
+  (ghostel-test--with-open-sync-output (_buf term)
+    (ghostel--write-vt term "\e[?2026l\e[?2026h\e[H\e[2JNEXT-FRAME")
+    (should (ghostel--mode-enabled term 2026))
+    (should (ghostel--redraw term))
+    (should (string-match-p "NEXT-FRAME" (buffer-string)))
+    (should-not (ghostel--redraw term))))
+
+(ert-deftest ghostel-test-admitted-redraw-keeps-sync-output-open-across-resize ()
+  "A resize committed by an admitted redraw leaves mode 2026 open.
+The next frame, already parsed past the reopen, stays held until the
+program closes the mode again."
+  :tags '(native)
+  (ghostel-test--with-open-sync-output (_buf term)
+    (ghostel--write-vt term "\e[?2026l\e[?2026h")
+    (ghostel--set-size term 6 40)
+    (should (ghostel--redraw term))
+    (should (= ghostel--term-rows 6))
+    (should (ghostel--mode-enabled term 2026))
+    (should-not (ghostel--redraw term))))
+
 (ert-deftest ghostel-test-sync-refusal-does-not-commit-pending-resize ()
   "A refused redraw performs no renderer work, including resize commit."
   :tags '(native)

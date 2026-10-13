@@ -20,6 +20,11 @@ All notable changes to this project will be documented in this file.
   points still install the module via `ghostel-module-auto-install`.
 
 ### Fixed
+- A program that closes and reopens synchronized output (mode 2026)
+  within one write no longer appears frozen: every completed frame
+  admits one redraw even while the next frame is already open.  That
+  redraw shows the grid as parsed so far, which may include the start
+  of the next frame.
 - Windows (ConPTY) resizes no longer pull scrollback rows back into
   the screen, which left later output on the wrong rows.
 - `C-x C-q` in a running compilation-style `ghostel-compile` buffer
