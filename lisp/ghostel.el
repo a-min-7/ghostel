@@ -344,6 +344,11 @@ and mode-switch anchors) by returning nil when it is set."
   "Hook run after entering copy or Emacs mode."
   :type 'hook)
 
+(defcustom ghostel-readonly-change-hook nil
+  "Hook run after `buffer-read-only' changes in a ghostel buffer.
+Fires on process spawn and exit and on input-mode switches."
+  :type 'hook)
+
 (defcustom ghostel-adaptive-fps t
   "Use adaptive frame rate for terminal redraw.
 When non-nil, use a shorter initial delay for responsive interactive
@@ -1828,10 +1833,13 @@ Deferred so a looping deletion command can finish;
 Nil while foreign edits are intercepted (live terminal-input modes, see
 `ghostel--forward-inserts-after-change') or user-editable (line mode);
 t restores the read-only barrier for copy/Emacs modes,
-dead terminals and compile-style buffers."
-  (setq buffer-read-only
-        (not (or (ghostel--insert-forwarding-live-p)
-                 (eq ghostel--input-mode 'line)))))
+dead terminals and compile-style buffers.  Runs
+`ghostel-readonly-change-hook' when the value changes."
+  (let ((ro (not (or (ghostel--insert-forwarding-live-p)
+                     (eq ghostel--input-mode 'line)))))
+    (unless (eq ro buffer-read-only)
+      (setq buffer-read-only ro)
+      (ghostel--run-hook-safely 'ghostel-readonly-change-hook))))
 
 
 ;;; Public input API
@@ -5427,13 +5435,12 @@ spawn after initialization."
     (when ghostel--plain-link-detection-timer
       (cancel-timer ghostel--plain-link-detection-timer))
     (ghostel--clear-plain-link-detection-bounds)
-    ;; Reinitialization may reuse an existing ghostel buffer that was in
-    ;; line mode; reset it to the renderer-owned default before erasing.
-    (setq buffer-read-only t)
     (let ((inhibit-read-only t))
       (erase-buffer))
-    (setq ghostel--input-mode 'semi-char
-          ghostel--term nil
+    ;; A reused buffer may still be in line mode; restore the barrier.
+    (setq ghostel--input-mode 'semi-char)
+    (ghostel--sync-read-only)
+    (setq ghostel--term nil
           ghostel--term-rows nil
           ghostel--term-cols nil
           ghostel--process nil

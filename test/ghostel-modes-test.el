@@ -1813,5 +1813,24 @@ unreachable outside ghostel buffers now that entry is guarded (issue #518)."
       (funcall setter 'ghostel-readonly-fast-exit ghostel-readonly-fast-exit))
     (should-not (current-local-map))))
 
+(ert-deftest ghostel-test-readonly-change-hook-fires-on-change-only ()
+  "`ghostel-readonly-change-hook' runs once per `buffer-read-only' flip."
+  (with-temp-buffer
+    (ghostel-mode)
+    (let* ((calls 0)
+           (ghostel-readonly-change-hook
+            (list (lambda () (cl-incf calls)))))
+      (should buffer-read-only)
+      (setq ghostel--input-mode 'line)
+      (ghostel--sync-read-only)
+      (should-not buffer-read-only)
+      (should (= calls 1))
+      (ghostel--sync-read-only)
+      (should (= calls 1))
+      (setq ghostel--input-mode 'copy)
+      (ghostel--sync-read-only)
+      (should buffer-read-only)
+      (should (= calls 2)))))
+
 (provide 'ghostel-modes-test)
 ;;; ghostel-modes-test.el ends here

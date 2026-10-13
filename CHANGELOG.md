@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- New hook `ghostel-readonly-change-hook`, run whenever a ghostel
+  buffer's `buffer-read-only` flips: process spawn and exit,
+  input-mode switches.
+
 ### Changed
 - Loading `ghostel.el` without the native module no longer logs a
   "Native module not found" warning.  Byte-compiling the package at
