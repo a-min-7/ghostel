@@ -2,8 +2,9 @@
 
 ;;; Commentary:
 
-;; OSC 2/4/9/10/11/51/52/777 handling, color queries, progress / notification
-;; dispatch, spinners.  OSC 8 hyperlink behavior lives in `ghostel-links-test'.
+;; OSC 2/4/9/10/11/51/52/777 handling, color queries, bell and notification
+;; dispatch.  OSC 8 hyperlinks live in `ghostel-links-test', program status
+;; (OSC 7501, OSC 9;4) in `ghostel-status-test'.
 
 ;;; Code:
 
@@ -353,71 +354,6 @@ ConEmu's CWD-reporting alias uses the same callback as OSC 7, so
            proc 5)
           (should (equal nil notifs)))))))
 
-(ert-deftest ghostel-test-osc9-progress ()
-  "OSC 9;4 progress reports reach `ghostel-progress-function'."
-  :tags '(native)
-  (ghostel-test--with-pty-matrix backend
-    (ghostel-test--with-raw-echo-buffer (buf proc)
-      (let* ((calls nil)
-             (ghostel-progress-function
-              (lambda (state progress) (push (list state progress) calls))))
-        (pcase-dolist (`(,payload ,expected)
-                       '(("\e]9;4;1;50\e\\" (set 50))
-                         ("\e]9;4;1\e\\" (set 0))
-                         ("\e]9;4;0\e\\" (remove nil))
-                         ("\e]9;4;0;100\e\\" (remove nil))
-                         ("\e]9;4;2\e\\" (error nil))
-                         ("\e]9;4;2;73\e\\" (error 73))
-                         ("\e]9;4;3\e\\" (indeterminate nil))
-                         ("\e]9;4;3;50\e\\" (indeterminate nil))
-                         ("\e]9;4;4;25\e\\" (pause 25))
-                         ("\e]9;4;0;\e\\" (remove nil))
-                         ("\e]9;4;1;999\e\\" (set 100))
-                         ("\e]9;4;1;99999999999\e\\" (set 100))
-                         ("\e]9;4;1;foo\e\\" (set nil))
-                         ("\e]9;4;2;foo\e\\" (error nil))))
-          (setq calls nil)
-          (ghostel--write-pty ghostel--term payload)
-          (ghostel-test--wait-until (lambda () calls) proc 5)
-          (should (equal (list expected) calls)))))))
-
-(ert-deftest ghostel-test-full-reset-clears-progress ()
-  "RIS dispatches a progress removal."
-  :tags '(native)
-  (ghostel-test--with-pty-matrix backend
-    (ghostel-test--with-raw-echo-buffer (buf proc)
-      (let* ((calls nil)
-             (ghostel-progress-function
-              (lambda (state progress) (push (list state progress) calls))))
-        (ghostel--write-vt ghostel--term "\e]9;4;1;50\e\\")
-        (ghostel-test--wait-until (lambda () calls) proc 5)
-        (should (equal '((set 50)) calls))
-        (setq calls nil)
-        (ghostel--write-vt ghostel--term "\ec")
-        (ghostel-test--wait-until (lambda () calls) proc 5)
-        (should (equal '((remove nil)) calls))))))
-
-(ert-deftest ghostel-test-osc-progress-dispatch ()
-  "`ghostel--osc-progress' converts the state string to a symbol."
-  (let ((calls nil))
-    (let ((ghostel-progress-function
-           (lambda (state progress) (push (list state progress) calls))))
-      (ghostel--osc-progress "set" 42)
-      (should (equal '((set 42)) calls))
-      (setq calls nil)
-      (ghostel--osc-progress "remove" nil)
-      (should (equal '((remove nil)) calls))
-      ;; Unknown state strings are dropped without invoking the handler
-      ;; (defends against a Zig-side typo polluting the obarray).
-      ;; `calls' is populated only by `ghostel-progress-function', so
-      ;; asserting it stayed nil proves the sink was not invoked.
-      (setq calls nil)
-      (should-not (ghostel--osc-progress "bogus" 1))
-      (should (equal nil calls)))
-    ;; nil function → no call, no error
-    (let ((ghostel-progress-function nil))
-      (should-not (ghostel--osc-progress "set" 10)))))
-
 (ert-deftest ghostel-test-osc777-notification ()
   "OSC 777 `notify;TITLE;BODY' reaches `ghostel-notification-functions'."
   :tags '(native)
@@ -577,15 +513,6 @@ killed-buffer one did not fire."
         (while (null fired) (sit-for 0.01))))
     (should (equal '("L") fired))))
 
-(ert-deftest ghostel-test-osc-progress-dispatch-error-isolated ()
-  "Errors in `ghostel-progress-function' are caught and demoted."
-  (let ((ghostel-progress-function (lambda (_s _p) (error "Boom")))
-        (inhibit-message t)
-        (debug-on-error nil))
-    (should-not (condition-case _
-                    (progn (ghostel--osc-progress "set" 10) nil)
-                  (error t)))))
-
 (ert-deftest ghostel-test-default-notify-uses-alert ()
   "Route notifications through `alert' when the package is available.
 `alert' is pre-provided so the branch fires under batch mode
@@ -625,142 +552,6 @@ through the dispatcher ends up at the alert backend."
         (ghostel-default-notify "" "hi")
         (should (equal (plist-get (cdr captured) :title) (buffer-name)))))))
 
-(ert-deftest ghostel-test-default-progress-modeline ()
-  "`ghostel-default-progress' sets `mode-line-process' per state."
-  (with-temp-buffer
-    (ghostel-default-progress 'set 42)
-    (should (equal " [42%]" mode-line-process))
-    (ghostel-default-progress 'indeterminate nil)
-    (should (equal " [...]" mode-line-process))
-    (ghostel-default-progress 'pause 10)
-    (should (equal " [paused 10%]" mode-line-process))
-    (ghostel-default-progress 'pause nil)
-    (should (equal " [paused]" mode-line-process))
-    (ghostel-default-progress 'error 99)
-    (should (string-match-p "\\[err 99%\\]" mode-line-process))
-    (ghostel-default-progress 'remove nil)
-    (should (null mode-line-process))))
-
-(ert-deftest ghostel-test-spinner-progress-errors-without-spinner ()
-  "`ghostel-spinner-progress' signals a user-error when spinner.el is absent.
-Stubs `require' to refuse loading `spinner' so the test does not depend on
-whether spinner.el is actually installed in the test env.
-
-FIXME: stubbing `require' is fragile — a stronger test would
-exercise the real no-spinner path (e.g. via a sandboxed `load-path'
-with no spinner.el available).  The stub currently matches reality
-\(returns nil for `(require 'spinner nil t)' when absent), but a
-future refactor of the require call would silently invalidate it."
-  (cl-letf* ((orig-require (symbol-function #'require))
-             ((symbol-function #'require)
-                 (lambda (feature &optional filename noerror)
-                   (if (eq feature 'spinner)
-                       (if noerror nil
-                         (signal 'file-missing (list "stub-no-spinner")))
-                     (funcall orig-require feature filename noerror)))))
-    (with-temp-buffer
-      (should-error (ghostel-spinner-progress 'indeterminate nil)
-                    :type 'user-error))))
-
-(ert-deftest ghostel-test-spinner-progress-indeterminate-starts-once ()
-  "`ghostel-spinner-progress' starts the spinner once across repeat events.
-Multiple `indeterminate' events during one working phase must not stack
-spinners — claude-code emits transitions repeatedly.  Verifies that
-`spinner-start' is called with the configured TYPE symbol (which is the
-form that installs spinner.el's mode-line construct) and that
-`ghostel--spinner-active' tracks the started/stopped state."
-  (let ((start-calls 0)
-        (start-args nil))
-    (cl-letf (((symbol-function #'require)
-               (lambda (&rest _) t))
-              ((symbol-function #'spinner-start)
-                 (lambda (&rest args)
-                   (cl-incf start-calls)
-                   (setq start-args args)))
-              ((symbol-function #'spinner-stop) #'ignore))
-      (with-temp-buffer
-        (ghostel-spinner-progress 'indeterminate nil)
-        (ghostel-spinner-progress 'indeterminate nil)
-        (should (= 1 start-calls))
-        (should (equal (list ghostel-spinner-type) start-args))
-        (should ghostel--spinner-active)))))
-
-(ert-deftest ghostel-test-spinner-progress-set-stops-and-shows-percent ()
-  "On `set', the spinner is stopped and `mode-line-process' is the percent text.
-Without the explicit stop, spinner.el's mode-line construct would
-remain (rendering empty alongside the percentage)."
-  (let ((stop-calls 0))
-    (cl-letf (((symbol-function #'require)
-               (lambda (&rest _) t))
-              ((symbol-function #'spinner-start) #'ignore)
-              ((symbol-function #'spinner-stop)
-                 (lambda (&rest _) (cl-incf stop-calls))))
-      (with-temp-buffer
-        (ghostel-spinner-progress 'indeterminate nil)
-        (ghostel-spinner-progress 'set 50)
-        (should (= 1 stop-calls))
-        (should-not ghostel--spinner-active)
-        (should (equal " [50%]" mode-line-process))))))
-
-(ert-deftest ghostel-test-spinner-progress-remove-clears-modeline ()
-  "On `remove', the spinner stops and `mode-line-process' is nil."
-  (cl-letf (((symbol-function #'require)
-             (lambda (&rest _) t))
-            ((symbol-function #'spinner-start) #'ignore)
-            ((symbol-function #'spinner-stop) #'ignore))
-    (with-temp-buffer
-      (ghostel-spinner-progress 'indeterminate nil)
-      (ghostel-spinner-progress 'remove nil)
-      (should-not ghostel--spinner-active)
-      (should (null mode-line-process)))))
-
-(ert-deftest ghostel-test-spinner-stop-helper-clears-state ()
-  "`ghostel--spinner-stop' calls `spinner-stop' and clears the active flag.
-The sentinel relies on this helper to drop a live spinner when the shell
-exits, so a regression here would leak the timer past the buffer's life."
-  (let ((stop-calls 0))
-    (cl-letf (((symbol-function #'spinner-stop)
-               (lambda (&rest _) (cl-incf stop-calls))))
-      (with-temp-buffer
-        (setq ghostel--spinner-active t)
-        (ghostel--spinner-stop)
-        (should (= 1 stop-calls))
-        (should-not ghostel--spinner-active)
-        ;; Idempotent: a second call is a no-op.
-        (ghostel--spinner-stop)
-        (should (= 1 stop-calls))))))
-
-(ert-deftest ghostel-test-progress-preserves-input-mode-tag ()
-  "Progress updates compose with the input-mode tag in `mode-line-process'."
-  (with-temp-buffer
-    (setq ghostel--mode-line-tag ":Line")
-    (ghostel--mode-line-refresh)
-    (should (equal ":Line" mode-line-process))
-    (ghostel-default-progress 'set 42)
-    (should (equal '(":Line" " [42%]") mode-line-process))
-    (ghostel-default-progress 'remove nil)
-    (should (equal ":Line" mode-line-process))))
-
-(ert-deftest ghostel-test-spinner-preserves-input-mode-tag ()
-  "Spinner transitions preserve `ghostel--mode-line-tag'.
-The composed `mode-line-process' must list both the tag and the
-spinner construct so the input-mode label keeps rendering while
-the spinner is active."
-  (cl-letf (((symbol-function #'require)
-             (lambda (&rest _) t))
-            ((symbol-function #'spinner-start) #'ignore)
-            ((symbol-function #'spinner-stop) #'ignore))
-    (with-temp-buffer
-      (setq ghostel--mode-line-tag ":Char")
-      (ghostel--mode-line-refresh)
-      (should (equal ":Char" mode-line-process))
-      (ghostel-spinner-progress 'indeterminate nil)
-      (should (equal '(":Char" spinner--mode-line-construct) mode-line-process))
-      (ghostel-spinner-progress 'set 75)
-      (should (equal '(":Char" " [75%]") mode-line-process))
-      (ghostel-spinner-progress 'remove nil)
-      (should (equal ":Char" mode-line-process)))))
-
 (ert-deftest ghostel-test-mode-line-refresh-skips-fmlu-when-unchanged ()
   "Refresh skips FMLU when the composed mode-line value is unchanged."
   (let ((fmlu-calls 0))
@@ -782,10 +573,10 @@ the spinner is active."
         (ghostel--mode-line-refresh)
         (should (= 2 fmlu-calls))
         ;; Progress changes the composed list → FMLU fires.
-        (setq ghostel--mode-line-progress " [42%]")
+        (setq ghostel--mode-line-status " [42%]")
         (ghostel--mode-line-refresh)
         (should (= 3 fmlu-calls))
-        ;; Identical progress packet → no FMLU.
+        ;; Identical status value → no FMLU.
         (ghostel--mode-line-refresh)
         (should (= 3 fmlu-calls))))))
 

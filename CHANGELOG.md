@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Program status (OSC 7501): programs report `idle`, `working`,
+  `done`, `blocked` or `error` with a message, kind and percentage.
+  Records live in `ghostel-program-status` and every change runs
+  `ghostel-program-status-functions`, whose default members show the
+  status in the mode line (a blocked or error record anywhere over the
+  root record) and send a notification when a record turns blocked,
+  done or error in a buffer you are not looking at.
+  The terminal answers the protocol's support query.
 - New hook `ghostel-readonly-change-hook`, run whenever a ghostel
   buffer's `buffer-read-only` flips: process spawn and exit,
   input-mode switches.
@@ -17,6 +25,9 @@ All notable changes to this project will be documented in this file.
   keyboard macro.
 - The bell and notification code moved into the new
   `lisp/ghostel-status.el`.
+- ConEmu OSC 9;4 progress reports feed the program status model and
+  are ignored once a program has used OSC 7501.  `ghostel-spinner-type`
+  nil now selects the plain text label.
 - libghostty bumped to ghostty a2e440396 (2026-10-14).  Shell `clear`
   and `C-l` at a prompt that is not on the last screen row now scroll
   the screen into scrollback instead of erasing it.
@@ -25,6 +36,11 @@ All notable changes to this project will be documented in this file.
   install time loads the file before the module exists, so every fresh
   install left the warning in `*Warnings*`.  The interactive entry
   points still install the module via `ghostel-module-auto-install`.
+
+### Removed
+- `ghostel-progress-function`, `ghostel-default-progress` and
+  `ghostel-spinner-progress`; customize `ghostel-program-status-functions`
+  instead.
 
 ### Fixed
 - A program that closes and reopens synchronized output (mode 2026)

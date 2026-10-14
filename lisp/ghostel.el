@@ -561,36 +561,6 @@ reach the user - matching ghostty's natural 200 ms termios polling
 cadence.  Set to 0 to open the prompt immediately."
   :type 'number)
 
-(defcustom ghostel-progress-function
-  (if (locate-library "spinner")
-      #'ghostel-spinner-progress
-    #'ghostel-default-progress)
-  "Function called for ConEmu OSC 9;4 progress reports.
-Called with two arguments: STATE (one of the symbols `remove',
-`set', `error', `indeterminate', `pause') and PROGRESS (an integer
-0-100, or nil when not reported).  Set to nil to ignore progress
-reports.
-
-When spinner.el is on the `load-path' at ghostel load time, the
-default is `ghostel-spinner-progress' (which animates the mode
-line during indeterminate progress).  Otherwise it is
-`ghostel-default-progress' (a plain text indicator).
-
-The handler runs synchronously on the VT-parser callpath because
-progress updates are expected to feed the mode line or similar
-cheap UI.  A slow handler here will stall terminal output — defer
-expensive work via `run-at-time' on your own if you need it."
-  :type '(choice (const :tag "Disabled" nil) function))
-
-(defcustom ghostel-spinner-type 'progress-bar
-  "Spinner style used by `ghostel-spinner-progress'.
-Passed to `spinner-create' as its first argument; see
-`spinner-types' in spinner.el for the full list (e.g.
-`progress-bar', `horizontal-moving', `vertical-breathing').
-Only consulted when `ghostel-progress-function' is
-`ghostel-spinner-progress'."
-  :type 'symbol)
-
 (defcustom ghostel-tramp-default-method nil
   "TRAMP method for constructing remote paths from OSC 7 directory reports.
 When directory tracking (OSC 7) reports a hostname that does not match
@@ -864,9 +834,6 @@ to nil to disable the regex fallback entirely (OSC 133 only)."
 (declare-function ghostel--spawn-native-process "ghostel-module" (term command pipe))
 (declare-function ghostel--kill-native-process "ghostel-module" (term))
 
-(declare-function spinner-create "spinner")
-(declare-function spinner-start "spinner")
-(declare-function spinner-stop "spinner")
 
 ;; Emacs 29+; registration is `fboundp'-gated in `ghostel-mode'.
 (declare-function yank-media-handler "yank-media" (types handler))
@@ -1025,9 +992,12 @@ The next redraw is full and realigns point to the terminal cursor.")
   "Last known working directory from OSC 7, used for dedup.")
 
 (defvar-local ghostel-title nil
-  "Current terminal title reported by OSC 0/2.
-This buffer-local value is read-only and nil when no title has been reported
-or the title has been cleared.")
+  "Current terminal title, or nil.
+The root program status record's title when it has one, else the
+title reported by OSC 0/2.")
+
+(defvar-local ghostel--osc-title nil
+  "Title reported by OSC 0/2, or nil.")
 
 (defvar-local ghostel--managed-buffer-name nil
   "Last buffer name managed by Ghostel title tracking.
@@ -1058,13 +1028,6 @@ See `ghostel-window-padding-balance'.")
 
 (defvar-local ghostel--top-pad 0
   "Pixels `ghostel--top-pad-overlay' currently adds above the first row.")
-
-(defvar-local ghostel--spinner-active nil
-  "Non-nil when this buffer has a spinner started by `ghostel-spinner-progress'.
-The spinner object itself lives in spinner.el's buffer-local
-`spinner-current'; this flag is what ghostel inspects to keep
-`ghostel-spinner-progress' idempotent and to give the sentinel
-something to gate teardown on.")
 
 
 ;;; Internal helpers
@@ -1676,6 +1639,7 @@ Returns the sequence string, or nil for unknown keys."
 (defun ghostel--on-user-input ()
   "Handle common state before explicit user input reaches the terminal."
   (deactivate-mark)
+  (ghostel-status--acknowledge)
   (when (and ghostel-readonly-fast-exit
              (memq ghostel--input-mode '(copy emacs)))
     (ghostel-readonly-exit))
@@ -2416,16 +2380,8 @@ the prompt."
 (defvar-local ghostel--mode-line-tag nil
   "Current input-mode label rendered in `mode-line-process'.
 String like \":Char\" / \":Line\" / \":Copy\" / \":Emacs\", or
-nil for semi-char.  Composed with `ghostel--mode-line-progress'
-\(and the spinner construct, when active) by
-`ghostel--mode-line-refresh' so OSC 9;4 progress updates do not
-clobber the input-mode label.")
-
-(defvar-local ghostel--mode-line-progress nil
-  "Current OSC 9;4 progress indicator for `mode-line-process'.
-Set by `ghostel-default-progress' / `ghostel-spinner-progress'.
-Composed with `ghostel--mode-line-tag' (and the spinner
-construct, when active) by `ghostel--mode-line-refresh'.")
+nil for semi-char.  Composed with the other parts by
+`ghostel--mode-line-refresh'.")
 
 (defun ghostel--mode-line-tag-mouse-exit (event)
   "Mouse-1 handler on the input-mode mode-line tag.
@@ -2468,23 +2424,17 @@ MODE is one of `char', `line', `copy', `emacs'."
               'local-map ghostel--mode-line-tag-mouse-map))
 
 (defun ghostel--mode-line-refresh ()
-  "Recompute `mode-line-process' from tag + spinner + progress.
-Composes `ghostel--mode-line-tag', the spinner construct (when
-`ghostel--spinner-active' is non-nil), and
-`ghostel--mode-line-progress' so the input-mode label stays
-visible while a progress indicator or spinner is active.  When
-only one component is active the value is that component
-directly (so callers and tests that expect a plain string keep
-working); otherwise it is a list mode-line construct.
-
-Skips `setq' and `force-mode-line-update' when the composed value
-is unchanged — `ghostel-default-progress' calls this once per
-OSC 9;4 packet, and same-value packets must not fire FMLU."
+  "Recompute `mode-line-process' from the input-mode tag, spinner and status.
+A single active component is used directly, several form a list.
+Skips `force-mode-line-update' when the composed value is unchanged."
   (let* ((parts (delq nil
                       (list ghostel--mode-line-tag
                             (and ghostel--spinner-active
                                  'spinner--mode-line-construct)
-                            ghostel--mode-line-progress
+                            ;; A bare string value is shown literally, a list
+                            ;; element gets %-processed; a list keeps "%%" uniform.
+                            (and ghostel--mode-line-status
+                                 (list ghostel--mode-line-status))
                             (and ghostel--password-mode-p
                                  (propertize " 🔒Password" 'face 'warning)))))
          (new-val (pcase parts
@@ -3462,73 +3412,6 @@ Only acts when `ghostel-enable-osc52' is non-nil."
         (when (fboundp 'gui-set-selection)
           (gui-set-selection 'CLIPBOARD text))))))
 
-(defun ghostel-default-progress (state progress)
-  "Default handler for OSC 9;4 ConEmu progress reports.
-Shows STATE and PROGRESS in `mode-line-process'.  STATE is one of
-`remove', `set', `error', `indeterminate', or `pause'; PROGRESS is
-an integer 0-100 or nil."
-  (let ((new-val
-         (pcase state
-           ('remove        nil)
-           ('set           (format " [%d%%]" (or progress 0)))
-           ('indeterminate " [...]")
-           ('error         (propertize (if progress
-                                           (format " [err %d%%]" progress)
-                                         " [err]")
-                                       'face 'error))
-           ('pause         (if progress
-                               (format " [paused %d%%]" progress)
-                             " [paused]"))
-           ;; Unknown state: keep the current progress value rather
-           ;; than silently clearing it, so a future Zig-side state is
-           ;; visible-but-stale instead of disappearing.
-           (_              ghostel--mode-line-progress))))
-    (unless (equal new-val ghostel--mode-line-progress)
-      (setq ghostel--mode-line-progress new-val)
-      (ghostel--mode-line-refresh))))
-
-(defun ghostel--spinner-stop ()
-  "Stop this buffer's progress spinner, if any.
-Safe to call when no spinner is running.  Errors from spinner.el
-\(e.g. on a half-torn-down buffer) are swallowed during teardown."
-  (when ghostel--spinner-active
-    (ignore-errors (spinner-stop))
-    (setq ghostel--spinner-active nil)
-    (ghostel--mode-line-refresh)))
-
-(defun ghostel-spinner-progress (state progress)
-  "Spinner-driven handler for OSC 9;4 ConEmu progress reports.
-Animates `mode-line-process' via spinner.el during indeterminate
-progress; falls back to a static text indicator (matching
-`ghostel-default-progress') for `set', `error', `pause', and `remove'.
-STATE is one of those symbols; PROGRESS is an integer 0-100 or nil.
-
-Requires spinner.el to be available; signals a `user-error' on
-the first call if it is not.  The spinner style is controlled by
-`ghostel-spinner-type'."
-  (unless (require 'spinner nil t)
-    (user-error
-     "Cannot run `ghostel-spinner-progress' without spinner.el — install it \
-from MELPA or set `ghostel-progress-function' to #'ghostel-default-progress"))
-  (if (eq state 'indeterminate)
-      ;; Indeterminate: install spinner.el's mode-line construct.
-      ;; Clear any prior determinate text first so the spinner shows
-      ;; alone, not appended to a stale " [50%]".
-      (unless ghostel--spinner-active
-        (setq ghostel--mode-line-progress nil
-              ghostel--spinner-active t)
-        ;; spinner-start mutates `mode-line-process' directly; the
-        ;; refresh below overwrites it with the composed value so the
-        ;; input-mode tag stays visible alongside the spinner.
-        (spinner-start ghostel-spinner-type)
-        (ghostel--mode-line-refresh))
-    ;; Any other state: stop the spinner and let the text indicator
-    ;; take over.  `ghostel--spinner-stop' refreshes the mode-line so
-    ;; the spinner construct disappears even if the new progress text
-    ;; happens to equal the old one.
-    (ghostel--spinner-stop)
-    (ghostel-default-progress state progress)))
-
 (defun ghostel--defer (function &rest args)
   "Run FUNCTION with ARGS soon, using the current buffer when it fires."
   (let ((buffer (current-buffer)))
@@ -3538,27 +3421,6 @@ from MELPA or set `ghostel-progress-function' to #'ghostel-default-progress"))
        (when (buffer-live-p buffer)
          (with-current-buffer buffer
            (apply function args)))))))
-
-(defun ghostel--osc-progress (state-str progress)
-  "Dispatch ConEmu OSC 9;4 progress to `ghostel-progress-function'.
-STATE-STR is the state name as a string (sent from the native
-module); it is converted to a known symbol via an explicit allowlist
-to avoid polluting the obarray if a future Zig-side typo sneaks in.
-Unknown state strings are silently dropped.
-PROGRESS is an integer 0-100 or nil."
-  (when ghostel-progress-function
-    (let ((state-sym (pcase state-str
-                       ("remove"        'remove)
-                       ("set"           'set)
-                       ("error"         'error)
-                       ("indeterminate" 'indeterminate)
-                       ("pause"         'pause))))
-      (when state-sym
-        (condition-case err
-            (funcall ghostel-progress-function state-sym progress)
-          (error
-           (message "ghostel: progress handler error: %s"
-                    (error-message-string err))))))))
 
 (defun ghostel-buffer-name-by-title (title)
   "Return \"*ghostel: TITLE*\", or nil when TITLE is nil.
@@ -3582,12 +3444,16 @@ Declines after a manual rename; a nil or unchanged NEW-NAME is a no-op."
     (setq ghostel--managed-buffer-name (buffer-name))))
 
 (defun ghostel--set-title (title)
-  "Record a terminal TITLE report (OSC 0/2) and rename the buffer.
-A nil or empty TITLE clears the title and reverts a title-derived
-name to the slot's creation-style name.  Renames via
-`ghostel-buffer-name-function' and `ghostel--rename-managed', which
-declines after a manual rename."
-  (setq ghostel-title (and title (not (string= "" title)) title))
+  "Record TITLE from OSC 0/2 and update the buffer title.
+A nil or empty TITLE clears it."
+  (setq ghostel--osc-title (and title (not (string= "" title)) title))
+  (ghostel--update-title))
+
+(defun ghostel--update-title ()
+  "Set `ghostel-title' from its sources and rename the buffer.
+`ghostel--rename-managed' declines after a manual rename; a cleared
+title reverts a title-derived name to the slot's creation-style name."
+  (setq ghostel-title (or ghostel-status--title ghostel--osc-title))
   (when ghostel-buffer-name-function
     (ghostel--rename-managed
      (or (funcall ghostel-buffer-name-function ghostel-title)
@@ -4010,7 +3876,8 @@ EVENT is the state-change description passed by Emacs."
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (ghostel--cancel-password-confirm-timer)
-        (ghostel--spinner-stop)
+        ;; Deferred, so that effects from the last output are applied first.
+        (ghostel--defer #'ghostel-status--drop-running)
         (remove-hook 'pre-redisplay-functions #'ghostel--fake-cursor-update t)
         (ghostel--fake-cursor-clear)
         (ghostel--run-hook-safely 'ghostel-exit-functions buf event))
@@ -5372,6 +5239,7 @@ spawn after initialization."
     ;; A reused buffer may still be in line mode; restore the barrier.
     (setq ghostel--input-mode 'semi-char)
     (ghostel--sync-read-only)
+    (ghostel-status--clear "")
     (setq ghostel--term nil
           ghostel--term-rows nil
           ghostel--term-cols nil
@@ -5379,6 +5247,8 @@ spawn after initialization."
           ghostel--pid nil
           ghostel--last-directory nil
           ghostel-title nil
+          ghostel--osc-title nil
+          ghostel-status--osc7501-seen nil
           ghostel--command-running nil
           ghostel--last-foreground nil
           ghostel--shell-comm nil

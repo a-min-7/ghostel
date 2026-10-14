@@ -37,6 +37,7 @@
 (declare-function ghostel--enter-readonly-input-mode "ghostel")
 (declare-function ghostel--resource-root "ghostel-module-install")
 (declare-function ghostel--run-hook-safely "ghostel")
+(declare-function ghostel-status--drop-running "ghostel-status")
 (declare-function ghostel--ssh-install-enabled-p "ghostel")
 (declare-function ghostel--terminfo-directory "ghostel")
 (defvar ghostel-prompt-navigation-input-mode)
@@ -559,6 +560,7 @@ not here.  This handler only tracks prompt positions and exit status."
      ;; Prompt start — record line number.
      (push (cons (count-lines (point-min) (point-max)) nil)
            ghostel--prompt-positions)
+     (ghostel-status--drop-running)
      ;; No D arrives for a command that replaced the shell (exec zsh).
      (setq ghostel--command-running nil))
     ("C"

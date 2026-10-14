@@ -693,8 +693,8 @@ read-only buffer (Emacs or copy).
   =ghostel-default= background (=color-dark-p=); a child's own OSC 11 override
   does not change it.  Clients that enabled Mode 2031 get an unsolicited 997
   when the classification changes (=ghostel-sync-theme=, automatic on theme change).
-- *OSC 9 / OSC 777* - desktop notifications and ConEmu progress reports (see
-  [[#notifications-and-progress][Notifications and Progress]]).
+- *OSC 9 / OSC 777 / OSC 7501* - desktop notifications and program status
+  (see [[#notifications-and-progress][Notifications and Progress]]).
 - Text attributes: bold, italic, faint, underline (single/double/curly/dotted/dashed, with color), strikethrough, inverse.
 - Cursor styles: block, bar, underline, hollow block - each steady or blinking.
 - Alternate screen buffer (for TUI apps like htop, vim, etc.).
@@ -1045,32 +1045,39 @@ handler emits no passthrough wrapper.
 (setq ghostel-notification-functions '(ghostel-tty-forward-notify))
 #+end_src
 
-ConEmu's *OSC 9;4* progress protocol is also recognised: build tools, AI agents
-like Claude Code, and other long-running commands emit it to report completion
-percentage.  Ghostel dispatches these to =ghostel-progress-function= with =(STATE
-PROGRESS)= where STATE is one of =remove=, =set=, =error=, =indeterminate=, =pause= and
-PROGRESS is an integer 0-100 or nil.
+Programs can also tell the terminal what they are doing with the
+[[https://www.superlogical.com/rex/docs/build/program-status][Program Status Protocol]] (*OSC 7501*): =idle=, =working= (with an optional
+percentage), =done=, =blocked= on the user (for =permission=, a =question= or
+=auth=), or =error=, each with a message.  Ghostel answers the support query, so
+programs that probe for the protocol use it.  ConEmu's *OSC 9;4* progress
+reports (build tools, Claude Code) are mapped onto the same model until a
+program uses OSC 7501.
 
-Two built-in handlers are available:
+Each terminal keeps one record per report id in =ghostel-program-status=, the
+program itself under the root id.  A new prompt or the process exit drops
+=working= and =blocked= records.  =done= and =error= stay until you send input to
+that terminal (=ghostel-status-acknowledge-on-input=), so a buffer you were not
+looking at still shows how its command ended.
 
-- =ghostel-default-progress= - plain text in =mode-line-process=: =[42%]=, =[...]=,
-  =[err 73%]=, =[paused 25%]=, or cleared on =remove=.  Zero dependencies.
-- =ghostel-spinner-progress= - animates =mode-line-process= via [[https://github.com/Malabarba/spinner.el][spinner.el]] during
-  =indeterminate= (e.g. while Claude Code is working) and falls back to the same
-  text indicator for the other states.
+Every change runs =ghostel-program-status-functions= with =(ID OLD NEW)=.  The
+default members:
 
-=ghostel-progress-function= defaults to =ghostel-spinner-progress= when spinner.el
-is on the =load-path= at ghostel load time, otherwise to =ghostel-default-progress=.
-Pin a specific handler explicitly:
+- =ghostel-status-mode-line= shows the status in =mode-line-process=: =[42%]=,
+  =[blocked: permission]=, =[done]=, =[error]=, with the message as tooltip.
+  A =blocked= or =error= record anywhere shows over the root record, with a
+  count when there are several (=[blocked: permission ×2]=, one tooltip line
+  each).  =working= without a percentage animates via [[https://github.com/Malabarba/spinner.el][spinner.el]] when it is
+  installed (=ghostel-spinner-type=; nil shows the plain =[...]=).  The words
+  come from =ghostel-status-mode-line-labels=.
+- =ghostel-status-notify= sends a desktop notification through
+  =ghostel-notification-functions= when any record enters a state in
+  =ghostel-status-notify-states= (default: blocked, done, error) while its
+  buffer is not the one you are looking at.  The title is the record's
+  title, else its app; =ghostel-status-app= resolves an app inherited from
+  an ancestor record.
 
-#+begin_src emacs-lisp
-;; Pin to spinner (errors with a hint if spinner.el isn't installed):
-(setq ghostel-progress-function #'ghostel-spinner-progress)
-;; Or stay on the plain text indicator:
-(setq ghostel-progress-function #'ghostel-default-progress)
-;; Pick a different spinner style - see `spinner-types' in spinner.el:
-(setq ghostel-spinner-type 'horizontal-moving)
-#+end_src
+A root record's =title= takes the place of the OSC 2 title in =ghostel-title=
+and the buffer name.
 
 ** Color palette
 :properties:
@@ -1476,12 +1483,15 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 
 ** Notifications and progress
 
-| Variable                       | Default                                             | Description                                                     |
-|--------------------------------+-----------------------------------------------------+-----------------------------------------------------------------|
-| =ghostel-notification-functions= | =(ghostel-default-notify)=                            | Hook for OSC 9 / OSC 777 notifications.                         |
-| =ghostel-bell-functions=         | =(ghostel-ding)=                                      | Hook for the terminal bell.                                     |
-| =ghostel-progress-function=      | spinner if available, else =ghostel-default-progress= | Handler for OSC 9;4 progress (nil disables).                    |
-| =ghostel-spinner-type=           | =progress-bar=                                        | Spinner style for =ghostel-spinner-progress= (see =spinner-types=). |
+| Variable                            | Default                      | Description                                                     |
+|-------------------------------------+------------------------------+-----------------------------------------------------------------|
+| =ghostel-notification-functions=      | =(ghostel-default-notify)=     | Hook for OSC 9 / OSC 777 notifications.                         |
+| =ghostel-bell-functions=              | =(ghostel-ding)=               | Hook for the terminal bell.                                     |
+| =ghostel-program-status-functions=    | mode line and notify members | Hook for OSC 7501 / OSC 9;4 status records, =(ID OLD NEW)=.       |
+| =ghostel-status-notify-states=        | =(blocked done error)=         | States that send a notification when entered.                   |
+| =ghostel-status-acknowledge-on-input= | =t=                            | Drop done and error records when you send input.                |
+| =ghostel-status-mode-line-labels=     | words per state              | Mode-line label per state.                                      |
+| =ghostel-spinner-type=                | =progress-bar=                 | Spinner while working without a percentage; nil for plain text. |
 
 ** Input and interaction
 
@@ -2314,6 +2324,7 @@ while ghostel and vterm trade a compile step for a C/Zig engine.
 | Plain-text URL/file detection | ✅      | ❌       | ❌       |
 | OSC 9 / 777 notifications     | ✅      | ❌       | ❌       |
 | OSC 9;4 progress reports      | ✅      | ❌       | ❌       |
+| OSC 7501 program status       | ✅      | ❌       | ❌       |
 | Synchronized output (2026)    | ✅      | ❌       | ❌       |
 | Kitty keyboard protocol       | ✅      | ❌       | ❌       |
 | Mouse passthrough to TUI      | ✅      | ❌       | ✅       |

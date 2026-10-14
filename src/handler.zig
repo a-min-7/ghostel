@@ -43,6 +43,8 @@ pub fn GhostelHandler(Effects: type) type {
             self.inner.effects.size = &sizeCallback;
             self.inner.effects.render_hold = &renderHoldCallback;
             self.inner.effects.semantic_prompt = &semanticPromptCallback;
+            // Registering this makes libghostty answer the OSC 7501 support query.
+            self.inner.effects.program_status = &programStatusCallback;
             return self;
         }
 
@@ -74,8 +76,8 @@ pub fn GhostelHandler(Effects: type) type {
                     self.inner.vt(action, value);
                     // libghostty clears the title on RIS without firing title_changed.
                     if (had_title) titleChangedCallback(&self.inner);
-                    // Progress exists only in Elisp, so RIS must remove it explicitly.
-                    self.handleProgressReport(.{ .state = .remove });
+                    // libghostty clears the status records itself; this re-arms OSC 9;4.
+                    self.effects.effect("ghostel--program-status-reset", .{});
                 },
 
                 // The parser filters icon-title forms; indexed stacks are unsupported.
@@ -211,6 +213,46 @@ pub fn GhostelHandler(Effects: type) type {
                 .invalid => return,
             }};
             self.effects.effect("ghostel--osc133-marker", .{ &marker, event.exit_code });
+        }
+
+        // ---------------------------------------------------------------------------
+        // OSC 7501 — program status
+        // ---------------------------------------------------------------------------
+
+        /// Forward a validated report to `ghostel--osc-program-status`.
+        fn programStatusCallback(
+            handler: *gt.TerminalStream.Handler,
+            report: gt.osc.Command.ProgramStatus.Report,
+        ) void {
+            const self: *Self = @fieldParentPtr("inner", handler);
+            var title_buf: [gt.osc.program_status.max_title_bytes]u8 = undefined;
+            var msg_buf: [gt.osc.program_status.max_msg_bytes]u8 = undefined;
+            const title = decodeText(report, .title, &title_buf) catch |err|
+                return log.warn("program status report dropped: {}", .{err});
+            const msg = decodeText(report, .msg, &msg_buf) catch |err|
+                return log.warn("program status report dropped: {}", .{err});
+            const kind = if (report.readOption(.kind)) |k| @tagName(k) else null;
+            self.effects.effect("ghostel--osc-program-status", .{
+                @tagName(report.state),
+                report.readOption(.id),
+                kind,
+                report.readOption(.progress),
+                report.readOption(.app),
+                title,
+                msg,
+            });
+        }
+
+        /// The decoded `title` or `msg` of `report`, or null when it has none.
+        fn decodeText(
+            report: gt.osc.Command.ProgramStatus.Report,
+            comptime option: gt.osc.Command.ProgramStatus.Option,
+            buf: []u8,
+        ) !?[]const u8 {
+            if (report.readOption(option) == null) return null;
+            var writer: std.Io.Writer = .fixed(buf);
+            try report.writeText(option, &writer);
+            return writer.buffered();
         }
 
         // ---------------------------------------------------------------------------
