@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
   The terminal bell runs the new `ghostel-bell-functions` hook, whose
   default member `ghostel-ding` beeps without terminating a running
   keyboard macro.
+- The bell and notification code moved into the new
+  `lisp/ghostel-status.el`.
 - libghostty bumped to ghostty a2e440396 (2026-10-14).  Shell `clear`
   and `C-l` at a prompt that is not on the last screen row now scroll
   the screen into scrollback instead of erasing it.
