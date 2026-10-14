@@ -18,7 +18,7 @@ the parallel bash/zsh/fish/python3 sessions from the evil-ghostel rewrite
   fish, nu`; they share the `echo`-style editing flow). 26 ops: motions/edits `i a A I x
   X dw 2dw cw c dd cc D C s S r 3r u . ~`, visual `v e d`, paste `p P`, and insert-mode
   Ctrl passthrough `C-w C-u C-a/C-e`. `{{shell}}`/`{{echo}}`/`{{setup}}` fill the shell
-  specifics; `{{u_expect}}`/`{{P_expect}}` flip the nu-only known failures to `xfail`.
+  specifics; `{{u_expect}}` flips the nu-only known failure to `xfail`.
   Plus 4 word-boundary ops (`ciw-path b-dw-path ciW-path opt-out`); see the
   word-boundary section below.
 - `matrix/python3.json` — the REPL, kept separate because it has no `echo` and its
@@ -48,7 +48,7 @@ elate run --keep-going --format json --set shell=/bin/zsh               --set ec
 elate run --keep-going --format json --set shell=/opt/homebrew/bin/fish --set echo=echo \
   --set 'setup=function fish_prompt; echo -n "> "; end; function fish_right_prompt; end' "$S"
 elate run --keep-going --format json --set shell=/opt/homebrew/bin/nu   --set echo=e \
-  --set 'setup=def e [...rest] { $rest | str join " " }' --set u_expect=fail --set P_expect=fail "$S"
+  --set 'setup=def e [...rest] { $rest | str join " " }' --set u_expect=fail "$S"
 
 elate run --keep-going --format json test/elate/matrix/python3.json
 ```
@@ -226,18 +226,35 @@ Protocol gotchas baked into the kitty scenario: `a=T` transmits *and* places an
 implicit copy at the cursor (use `a=t` + `a=p`); `d=A` (capital) also frees the image
 data, so later `a=p` for that id places nothing.
 
+## Synchronized output and shell-integration suites (plain ghostel, TTY 80x24, bash)
+
+- `matrix/sync-output-ghostel.json` -- DEC mode 2026. Groups: `reopen` (a frame closed
+  and reopened within one write admits one redraw: content written after the reopen is
+  visible while the mode stays open), `release` (`CSI ? 2026 l` lets output through and
+  clears the mode), `resize-held` (a window resize committed while the mode is open
+  leaves it open, and a later close+reopen frame still paints). The feeds carry no
+  sentinel: an echo would be held inside the open frame. Window-size changes force their
+  redraw, so a resize commits even while the mode is open.
+- `matrix/shell-integration-ghostel.json` -- bash integration (auto-injected). Groups:
+  `exit-code` (OSC 133 D codes reach `ghostel-command-finish-functions` as integers for
+  `false`, `true`, `(exit 7)`), `clear-scrollback` (`clear` sends `CSI H CSI 2 J`, no
+  `CSI 3 J`, so earlier output stays in the buffer).
+
+```sh
+elate run --keep-going --format json test/elate/matrix/sync-output-ghostel.json
+elate run --keep-going --format json test/elate/matrix/shell-integration-ghostel.json
+```
+
 ## Known xfails (flagged, not fixed — confirmed live on elate 0.11.0)
 
 - **`u` (undo) on `nu` and `python3`** — `evil-ghostel-undo` sends `C-_` (readline/zle
   undo); reedline and PyREPL don't bind it.
-- **`P` (paste-before) on `nu`** — reedline pastes nothing on paste-before (`p`
-  paste-after works).
 - **`~` (toggle-case) on all shells** — evil-ghostel doesn't remap `~`, so vanilla Evil
-  runs against the read-only `*ghostel*` render buffer and the keystroke itself signals
-  `Buffer is read-only` (the op errors outright, not just "reverts on redraw").
+  edits the `*ghostel*` render buffer; the next redraw repairs it and the typed input
+  is unchanged.
 
 Each is marked `expect: "fail"` so a regression elsewhere still shows red and a future
-fix shows **XPASS**. Everything else passed on bash/zsh/fish/nu (incl. `a X s S p`,
+fix shows **XPASS**. Everything else passed on bash/zsh/fish/nu (incl. `a X s S p P`,
 dot-repeat, and the `C-w`/`C-u`/`C-a`/`C-e` insert passthrough); python3 covers the
 subset that maps cleanly to REPL expressions (`i a A I x 2dw dd cc r a X s` + `u` xfail).
 

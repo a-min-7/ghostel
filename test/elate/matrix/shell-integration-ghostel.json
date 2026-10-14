@@ -1,0 +1,104 @@
+{
+  "name": "shell-integration-ghostel",
+  "comment": "Bash shell integration: OSC 133 D exit codes reach ghostel-command-finish-functions as integers; clear(1) (CSI H CSI 2 J, no CSI 3 J) at a mid-screen prompt scrolls the screen into scrollback.",
+  "session": {
+    "ui": "tty",
+    "size": "80x24",
+    "config": "minimal",
+    "eval": [
+      "(load \"/Users/daniel/.emacs.d/lib/ghostel/test/elate/lib/ghostel-setup.el\")",
+      "(setq ghostel-shell \"/opt/homebrew/bin/bash\")"
+    ]
+  },
+  "steps": [
+    {
+      "eval": "(ghostel)"
+    },
+    {
+      "wait": "text",
+      "pattern": "\\$ $",
+      "buffer": "*ghostel*",
+      "timeout": 15
+    },
+    {
+      "eval": "(ghostel-send-string \"PS1='$ '\\n\")"
+    },
+    {
+      "wait": "idle",
+      "min_idle": 0.8,
+      "timeout": 10
+    },
+    {
+      "group": "exit-code",
+      "comment": "finish hook receives integer exit codes"
+    },
+    {
+      "eval": "(with-current-buffer \"*ghostel*\" (defvar ghostel-elate--exits nil) (setq ghostel-elate--exits nil) (add-hook 'ghostel-command-finish-functions (lambda (_buf code) (push code ghostel-elate--exits)) nil t))"
+    },
+    {
+      "eval": "(ghostel-send-string \"false\\n\")"
+    },
+    {
+      "wait": "until",
+      "pred": "(eql (car ghostel-elate--exits) 1)",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "eval": "(ghostel-send-string \"true\\n\")"
+    },
+    {
+      "wait": "until",
+      "pred": "(eql (car ghostel-elate--exits) 0)",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "eval": "(ghostel-send-string \"(exit 7)\\n\")"
+    },
+    {
+      "wait": "until",
+      "pred": "(eql (car ghostel-elate--exits) 7)",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "assert": {
+        "eval": "(and (cl-every #'integerp ghostel-elate--exits) (equal (seq-take ghostel-elate--exits 3) '(7 0 1)))",
+        "buffer": "*ghostel*"
+      }
+    },
+    {
+      "group": "clear-scrollback",
+      "comment": "clear keeps earlier output reachable"
+    },
+    {
+      "eval": "(ghostel-send-string \"seq 1 30; echo c-done\\n\")"
+    },
+    {
+      "wait": "text",
+      "pattern": "c-done",
+      "buffer": "*ghostel*",
+      "timeout": 10
+    },
+    {
+      "wait": "idle",
+      "min_idle": 1.0,
+      "timeout": 10
+    },
+    {
+      "eval": "(ghostel-send-string \"clear\\n\")"
+    },
+    {
+      "wait": "idle",
+      "min_idle": 1.5,
+      "timeout": 10
+    },
+    {
+      "assert": {
+        "eval": "(and (ghostel-elate--has-line \"c-done\") (ghostel-elate--has-line \"30\"))",
+        "buffer": "*ghostel*"
+      }
+    }
+  ]
+}

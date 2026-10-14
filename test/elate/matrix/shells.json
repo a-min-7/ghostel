@@ -1,12 +1,11 @@
 {
   "name": "evil-ghostel-shells",
-  "comment": "evil-ghostel operator/motion matrix across shells. Drive one shell per `elate run` with --set shell=.. --set echo=.. --set setup=.. (co-varying, so not a `matrix --param` Cartesian axis). Use --keep-going so every group reports. Each group types a command, applies an Evil edit over the PTY, executes it, and asserts the output -- the shell proves the edit landed. Per-shell known failures ride on the failing `wait` step via `expect: {{u_expect}}/{{P_expect}}` (default pass; set to fail for nu).",
+  "comment": "evil-ghostel operator/motion matrix across shells. Drive one shell per `elate run` with --set shell=.. --set echo=.. --set setup=.. (co-varying, so not a `matrix --param` Cartesian axis). Use --keep-going so every group reports. Each group types a command, applies an Evil edit over the PTY, executes it, and asserts the output -- the shell proves the edit landed. The nu-only known failure rides on the failing `wait` step via `expect: {{u_expect}}` (default pass; set to fail for nu).",
   "params": {
     "shell": "/opt/homebrew/bin/bash",
     "echo": "echo",
     "setup": "",
-    "u_expect": "pass",
-    "P_expect": "pass"
+    "u_expect": "pass"
   },
   "session": {
     "ui": "tty",
@@ -181,8 +180,7 @@
     {"keys": "<escape> ^ w y w P"},
     {"keys": "A"},
     {"keys": "RET"},
-    {"wait": "text", "pattern": "^okok$", "timeout": 8.0,
-     "expect": "{{P_expect}}", "reason": "nu/reedline paste-before inserts nothing (paste-after works)"},
+    {"wait": "text", "pattern": "^okok$", "timeout": 8.0},
 
     {"group": "C-w", "comment": "insert-mode C-w passthrough: delete word backward"},
     {"type": "{{echo}} BADWORD"},
@@ -250,10 +248,10 @@
 
     {"group": "~", "comment": "~ toggle-case"},
     {"type": "{{echo}} aBC"},
-    {"keys": "<escape> ^ w ~", "expect": "fail", "reason": "~ is not remapped to a PTY-routed op, so vanilla Evil tries to edit the read-only *ghostel* render buffer and signals `Buffer is read-only`"},
+    {"keys": "<escape> ^ w ~"},
     {"keys": "A"},
     {"keys": "RET"},
     {"wait": "text", "pattern": "^ABC$", "timeout": 8.0,
-     "expect": "fail", "reason": "consequently the input is unchanged, so the toggled-case output never appears"}
+     "expect": "fail", "reason": "~ is not remapped to a PTY-routed op: vanilla Evil edits the *ghostel* render buffer, the next redraw repairs it, and the typed input is unchanged"}
   ]
 }

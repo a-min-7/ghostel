@@ -1,0 +1,137 @@
+{
+  "name": "sync-output-ghostel",
+  "comment": "DEC mode 2026: a frame closed and reopened within one write admits exactly one redraw (content after the reopen is visible, mode stays open); a resize committed while the mode is open leaves it open.",
+  "session": {
+    "ui": "tty",
+    "size": "80x24",
+    "config": "minimal",
+    "eval": [
+      "(load \"/Users/daniel/.emacs.d/lib/ghostel/test/elate/lib/ghostel-setup.el\")",
+      "(setq ghostel-shell \"/opt/homebrew/bin/bash\")"
+    ]
+  },
+  "steps": [
+    {
+      "eval": "(ghostel)"
+    },
+    {
+      "wait": "text",
+      "pattern": "\\$ $",
+      "buffer": "*ghostel*",
+      "timeout": 15
+    },
+    {
+      "eval": "(ghostel-send-string \"PS1='$ '\\n\")"
+    },
+    {
+      "wait": "idle",
+      "min_idle": 0.8,
+      "timeout": 10
+    },
+    {
+      "group": "reopen",
+      "comment": "close+reopen in one write paints the grid as parsed so far"
+    },
+    {
+      "eval": "(ghostel-elate--vt \"\\u001b[?2026h\\u001b[H\\u001b[2JFRAME-ONE\\u001b[?2026l\\u001b[?2026h\\u001b[H\\u001b[2JFRAME-TWO\")"
+    },
+    {
+      "wait": "until",
+      "pred": "(ghostel--mode-enabled ghostel--term 2026)",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "wait": "until",
+      "pred": "(save-excursion (goto-char (point-min)) (search-forward \"FRAME-TWO\" nil t))",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "assert": {
+        "eval": "(ghostel--mode-enabled ghostel--term 2026)",
+        "buffer": "*ghostel*"
+      }
+    },
+    {
+      "group": "release",
+      "comment": "closing the mode lets output through"
+    },
+    {
+      "eval": "(ghostel-elate--vt \"\\u001b[?2026l\" \"s-released\")"
+    },
+    {
+      "wait": "text",
+      "pattern": "s-released",
+      "buffer": "*ghostel*",
+      "timeout": 10
+    },
+    {
+      "assert": {
+        "eval": "(not (ghostel--mode-enabled ghostel--term 2026))",
+        "buffer": "*ghostel*"
+      }
+    },
+    {
+      "group": "resize-held",
+      "comment": "a resize committed while the mode is open (window changes force the redraw) must not clear it; a reopened frame afterwards still paints"
+    },
+    {
+      "eval": "(ghostel-elate--vt \"\\u001b[?2026h\\u001b[H\\u001b[2JHELD-A\")"
+    },
+    {
+      "wait": "until",
+      "pred": "(ghostel--mode-enabled ghostel--term 2026)",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "eval": "(setq ghostel-elate--cols ghostel--term-cols)"
+    },
+    {
+      "resize": "100x24"
+    },
+    {
+      "wait": "until",
+      "pred": "(/= ghostel--term-cols ghostel-elate--cols)",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "assert": {
+        "eval": "(ghostel--mode-enabled ghostel--term 2026)",
+        "buffer": "*ghostel*"
+      }
+    },
+    {
+      "eval": "(ghostel-elate--vt \"\\u001b[?2026l\\u001b[?2026hHELD-B\")"
+    },
+    {
+      "wait": "until",
+      "pred": "(save-excursion (goto-char (point-min)) (search-forward \"HELD-B\" nil t))",
+      "buffer": "*ghostel*",
+      "timeout": 5
+    },
+    {
+      "assert": {
+        "eval": "(and (save-excursion (goto-char (point-min)) (search-forward \"HELD-B\" nil t)) (ghostel--mode-enabled ghostel--term 2026))",
+        "buffer": "*ghostel*"
+      }
+    },
+    {
+      "eval": "(ghostel-elate--vt \"\\u001b[?2026l\" \"s-released\")"
+    },
+    {
+      "wait": "text",
+      "pattern": "s-released",
+      "buffer": "*ghostel*",
+      "timeout": 10
+    },
+    {
+      "assert": {
+        "eval": "(not (ghostel--mode-enabled ghostel--term 2026))",
+        "buffer": "*ghostel*"
+      }
+    }
+  ]
+}
