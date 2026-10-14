@@ -10,6 +10,11 @@ All notable changes to this project will be documented in this file.
   input-mode switches.
 
 ### Changed
+- `ghostel-notification-function` is now the abnormal hook
+  `ghostel-notification-functions`; the old name is an obsolete alias.
+  The terminal bell runs the new `ghostel-bell-functions` hook, whose
+  default member `ghostel-ding` beeps without terminating a running
+  keyboard macro.
 - libghostty bumped to ghostty a2e440396 (2026-10-14).  Shell `clear`
   and `C-l` at a prompt that is not on the last screen row now scroll
   the screen into scrollback instead of erasing it.

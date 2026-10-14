@@ -1014,23 +1014,26 @@ Ghostel recognises two notification protocols used by terminal programs:
 - *OSC 9* (iTerm2 form): =ESC ] 9 ; BODY ST= - body only.
 - *OSC 777* (rxvt =notify=): =ESC ] 777 ; notify ; TITLE ; BODY ST= - title + body.
 
-Both route to =ghostel-notification-function= with =(TITLE BODY)=.  The default
-handler, =ghostel-default-notify=, uses the [[https://github.com/jwiegley/alert][alert]] package when installed - it picks
-a sensible backend per platform (=osascript= on macOS, libnotify on Linux, Growl,
-terminal-notifier, etc.) and is configurable via =alert-default-style=.  Install
-it from MELPA with =M-x package-install RET alert RET=.
+Both run the =ghostel-notification-functions= hook with =(TITLE BODY)= and the
+terminal buffer current.  The default member, =ghostel-default-notify=, uses the
+[[https://github.com/jwiegley/alert][alert]] package when installed - it picks a sensible backend per platform
+(=osascript= on macOS, libnotify on Linux, Growl, terminal-notifier, etc.) and is
+configurable via =alert-default-style=.  Install it from MELPA with
+=M-x package-install RET alert RET=.  When =alert= is not available, it falls back
+to =message=, which only appears in the echo area.
 
-When =alert= is not available, ghostel falls back to =message=, which only appears
-in the echo area.  Set =ghostel-notification-function= to nil to silence
-notifications entirely, or to your own function to route them elsewhere.
-
-A custom handler receives the title and body and can route them anywhere:
+Remove the default member to silence notifications, or add your own to route
+them elsewhere:
 
 #+begin_src emacs-lisp
-(setq ghostel-notification-function
-      (lambda (title body)
-        (alert body :title (or title "ghostel") :category 'ghostel)))
+(remove-hook 'ghostel-notification-functions #'ghostel-default-notify)
+(add-hook 'ghostel-notification-functions
+          (lambda (title body)
+            (alert body :title (or title "ghostel") :category 'ghostel)))
 #+end_src
+
+The terminal bell (=BEL=) runs =ghostel-bell-functions=; the default member
+=ghostel-ding= beeps.  Remove it to silence the bell.
 
 In a terminal Emacs (=emacs -nw=, =emacsclient -t=), =ghostel-tty-forward-notify=
 re-emits the notification as OSC 9 / OSC 777 to the outer terminal, so a remote
@@ -1039,7 +1042,7 @@ back to =ghostel-default-notify=.  tmux or screen in between drop it; this
 handler emits no passthrough wrapper.
 
 #+begin_src emacs-lisp
-(setq ghostel-notification-function #'ghostel-tty-forward-notify)
+(setq ghostel-notification-functions '(ghostel-tty-forward-notify))
 #+end_src
 
 ConEmu's *OSC 9;4* progress protocol is also recognised: build tools, AI agents
@@ -1473,11 +1476,12 @@ tables below group them by area; defaults shown are the out-of-the-box values.
 
 ** Notifications and progress
 
-| Variable                      | Default                                             | Description                                                     |
-|-------------------------------+-----------------------------------------------------+-----------------------------------------------------------------|
-| =ghostel-notification-function= | =ghostel-default-notify=                              | Handler for OSC 9 / OSC 777 notifications (nil disables).       |
-| =ghostel-progress-function=     | spinner if available, else =ghostel-default-progress= | Handler for OSC 9;4 progress (nil disables).                    |
-| =ghostel-spinner-type=          | =progress-bar=                                        | Spinner style for =ghostel-spinner-progress= (see =spinner-types=). |
+| Variable                       | Default                                             | Description                                                     |
+|--------------------------------+-----------------------------------------------------+-----------------------------------------------------------------|
+| =ghostel-notification-functions= | =(ghostel-default-notify)=                            | Hook for OSC 9 / OSC 777 notifications.                         |
+| =ghostel-bell-functions=         | =(ghostel-ding)=                                      | Hook for the terminal bell.                                     |
+| =ghostel-progress-function=      | spinner if available, else =ghostel-default-progress= | Handler for OSC 9;4 progress (nil disables).                    |
+| =ghostel-spinner-type=           | =progress-bar=                                        | Spinner style for =ghostel-spinner-progress= (see =spinner-types=). |
 
 ** Input and interaction
 

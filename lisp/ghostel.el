@@ -560,16 +560,23 @@ reach the user - matching ghostty's natural 200 ms termios polling
 cadence.  Set to 0 to open the prompt immediately."
   :type 'number)
 
-(defcustom ghostel-notification-function #'ghostel-default-notify
-  "Function called for OSC 9 / OSC 777 desktop notifications.
-Called with two string arguments: TITLE and BODY.  Title is empty
-for iTerm2-style OSC 9 notifications, which only carry a body.
-Set to nil to ignore notifications.
+(defcustom ghostel-bell-functions '(ghostel-ding)
+  "Hook run when the terminal receives BEL.
+Each function is called with no arguments and the terminal buffer
+current.  Remove `ghostel-ding' to silence the bell."
+  :type 'hook)
 
-The handler is invoked asynchronously via `run-at-time', with the
-originating ghostel buffer as `current-buffer', so it may block or
-spawn processes freely without stalling the terminal."
-  :type '(choice (const :tag "Disabled" nil) function))
+(define-obsolete-variable-alias 'ghostel-notification-function
+  'ghostel-notification-functions "0.58.0")
+
+(defcustom ghostel-notification-functions '(ghostel-default-notify)
+  "Hook run for OSC 9 / OSC 777 desktop notifications.
+Each function is called with two string arguments, TITLE and BODY,
+with the originating terminal buffer current.  TITLE is empty for
+iTerm2-style OSC 9.  The hook runs asynchronously via `run-at-time',
+so handlers may block or spawn processes without stalling the
+terminal."
+  :type 'hook)
 
 (defcustom ghostel-progress-function
   (if (locate-library "spinner")
@@ -3495,7 +3502,8 @@ TITLE falls back to that buffer's name."
 On a tty frame, re-emit TITLE and BODY as OSC 9 (empty TITLE) or
 OSC 777 to the frame showing this buffer, else the selected frame.
 On a GUI frame, fall back to `ghostel-default-notify'.
-Use as `ghostel-notification-function'."
+Use in place of `ghostel-default-notify' in
+`ghostel-notification-functions'."
   (let ((frame (window-frame (get-buffer-window nil t))))
     (if (tty-type frame)
         (send-string-to-terminal
@@ -3582,33 +3590,20 @@ from MELPA or set `ghostel-progress-function' to #'ghostel-default-progress"))
          (with-current-buffer buffer
            (apply function args)))))))
 
+(defun ghostel-ding ()
+  "Beep without terminating a running keyboard macro."
+  (ding t))
+
+(defun ghostel--bell ()
+  "Run `ghostel-bell-functions' for a BEL from the native VT parser."
+  (ghostel--run-hook-safely 'ghostel-bell-functions))
+
 (defun ghostel--handle-notification (title body)
-  "Dispatch TITLE and BODY to `ghostel-notification-function'.
-Called synchronously from the native VT parser; the user handler
-is invoked off the callpath via `run-at-time' so a slow backend
-\(DBus, osascript, etc.) can't stall terminal output.  The
-originating ghostel buffer is made current for the handler, so
-`buffer-name' etc. report the terminal buffer and not whatever was
-current when the timer happened to fire.  Errors in the handler
-are caught and logged — an unhandled error in a timer callback
-does not crash the process filter, but it does produce a backtrace
-in batch runs."
-  (when ghostel-notification-function
-    (let ((buf (current-buffer))
-          (fn ghostel-notification-function))
-      (run-at-time
-       0 nil
-       (lambda ()
-         (when (buffer-live-p buf)
-           (with-current-buffer buf
-             ;; Only `error' is caught here — `quit' (C-g) is allowed
-             ;; to propagate so a user can interrupt a hung handler.
-             ;; Emacs' timer machinery swallows a propagated quit.
-             (condition-case err
-                 (funcall fn title body)
-               (error
-                (message "ghostel: notification handler error: %s"
-                         (error-message-string err)))))))))))
+  "Run `ghostel-notification-functions' with TITLE and BODY.
+Deferred via `ghostel--defer' so a slow backend (DBus, osascript)
+does not block terminal output."
+  (ghostel--defer #'ghostel--run-hook-safely
+                  'ghostel-notification-functions title body))
 
 (defun ghostel--osc-progress (state-str progress)
   "Dispatch ConEmu OSC 9;4 progress to `ghostel-progress-function'.
