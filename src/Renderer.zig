@@ -22,6 +22,11 @@ const Self = @This();
 /// Set to true while rendering is in progress
 is_rendering: bool = false,
 
+/// Synchronized output (mode 2026) closed since the last redraw.  Lets a
+/// redraw through while the mode is open again, so a program that reopens
+/// it within one write never looks frozen.
+frame_completed: bool = false,
+
 /// Allocator used by renderer-owned state.
 alloc: Allocator,
 
@@ -153,7 +158,7 @@ pub fn resize(self: *Self, cols: u16, rows: u16, cell_w: u32, cell_h: u32) !void
 }
 
 pub fn redraw(self: *Self, env: emacs.Env, force_full: bool, force_sync: bool) !bool {
-    if (!force_sync and self.term.modes.get(.synchronized_output)) return false;
+    if (!force_sync and !self.frame_completed and self.term.modes.get(.synchronized_output)) return false;
     if (self.is_rendering) return error.ReentrantRedraw;
     self.is_rendering = true;
     defer self.is_rendering = false;
@@ -196,6 +201,7 @@ pub fn redraw(self: *Self, env: emacs.Env, force_full: bool, force_sync: bool) !
     } else {
         env.set("ghostel--repainted-region", env.nil());
     }
+    self.frame_completed = false;
     return true;
 }
 

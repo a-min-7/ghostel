@@ -96,7 +96,7 @@ pub fn GhostelHandler(Effects: type) type {
         /// Mode 2026 closed: the frame is complete, let the next redraw through.
         fn renderHoldCallback(handler: *gt.TerminalStream.Handler, held: bool) void {
             const self: *Self = @fieldParentPtr("inner", handler);
-            if (!held) self.term.frame_completed = true;
+            if (!held) self.term.renderer.frame_completed = true;
         }
 
         /// Called when the terminal receives BEL.
