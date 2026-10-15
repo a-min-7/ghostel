@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.58.0] — 2026-10-15
+
 ### Added
 - Program status (OSC 7501): programs report `idle`, `working`,
   `done`, `blocked` or `error` with a message, kind and percentage.
@@ -36,6 +38,14 @@ All notable changes to this project will be documented in this file.
   install time loads the file before the module exists, so every fresh
   install left the warning in `*Warnings*`.  The interactive entry
   points still install the module via `ghostel-module-auto-install`.
+- OSC 8 links: a bare `PATH[:LINE[:COL]]` target opens at that position,
+  an absolute path keeps the TRAMP prefix of a remote
+  `default-directory`, and any URI scheme (`mailto:`, not only
+  `scheme://`) is handed to `browse-url`.
+- evil-ghostel: `<home>` in normal, visual, operator and motion states
+  runs the prompt-aware `^` motion, matching where it lands in insert
+  state.  `0` stays column 0.
+  Fixes [#718](https://github.com/dakra/ghostel/issues/718).
 
 ### Removed
 - `ghostel-progress-function`, `ghostel-default-progress` and
@@ -59,6 +69,16 @@ All notable changes to this project will be documented in this file.
   Emacs in live terminal-input modes.  A foreign deletion of rendered
   text is repaired by one full redraw after the command ends, and
   insertions made while that repair is pending are dropped with it.
+- `ghostel-clear` keeps the screen in scrollback regardless of where
+  the prompt sits; output above a mid-screen prompt was discarded.
+  Fixes [#721](https://github.com/dakra/ghostel/issues/721).
+- Quail input methods without `ghostel-ime-mode` no longer send every
+  character twice: the preedit inserted during translation is not
+  forwarded to the PTY.
+  Fixes [#738](https://github.com/dakra/ghostel/issues/738).
+- Nerd-font icons followed by a bold, colored, hyperlinked or
+  prompt-semantic space (lsd, eza, shell prompts) render at full width
+  instead of being squeezed into one cell.
 
 ## [0.57.0] — 2026-10-09
 
