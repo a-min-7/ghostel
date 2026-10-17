@@ -56,6 +56,7 @@ or custom functions that interact with the Ghostel buffer.
 ```emacs-lisp
 (use-package ghostel
   :bind (("C-x m" . ghostel)
+         ([remap async-shell-command] . ghostel-shell-command)
          :map ghostel-semi-char-mode-map
          ("C-s"  . consult-line)
          ("C-k"  . my/ghostel-send-C-k-and-kill)
