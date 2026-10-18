@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `ghostel-exit-functions` now receives the child's exit status as a
+  third argument, so handlers can distinguish success from failure on
+  the native-PTY path, where both have always surfaced as `"finished"`.
+  A child killed by a signal reports 128 plus the signal number on
+  both the native and Emacs-PTY backends.  Handlers that declare two
+  arguments keep receiving just `(BUFFER EVENT)`.
+
 ## [0.58.0] — 2026-10-15
 
 ### Added

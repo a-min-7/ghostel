@@ -262,6 +262,59 @@ is nil, SIGHUP is ignored."
           (ghostel-test--cleanup-exec-buffer buf))
         (delete-directory dir t)))))
 
+(ert-deftest ghostel-test-exec-exit-hook-receives-status ()
+  "Exit hooks receive the child's real status on every local backend.
+On the native-PTY path both a clean exit and a failure arrive as
+EVENT \"finished\\n\", so STATUS is the only way a handler can tell
+them apart.  Two-argument handlers keep the old contract."
+  :tags '(native posix)
+  (skip-unless (file-executable-p "/bin/sh"))
+  (ghostel-test--with-pty-matrix backend
+    (cl-labels ((check-exit
+                 (script want signal-p)
+                 (let* ((ghostel-kill-buffer-on-exit nil)
+                        (buf (generate-new-buffer " *ghostel-test-exit-status*"))
+                        (calls nil)
+                        (legacy-calls 0)
+                        proc pid)
+                   (unwind-protect
+                       (progn
+                         (with-current-buffer buf
+                           (setq proc (ghostel-exec buf "/bin/sh" (list "-c" script)))
+                           ;; A three-argument handler records the exact
+                           ;; contract; a two-argument handler proves the old
+                           ;; one still works and still gets only two.
+                           (add-hook 'ghostel-exit-functions
+                                     (lambda (buffer event status)
+                                       (push (list buffer event status) calls))
+                                     nil t)
+                           (add-hook 'ghostel-exit-functions
+                                     (lambda (_buffer _event)
+                                       (cl-incf legacy-calls))
+                                     nil t)
+                           (ghostel-test--wait-for-text "GHOSTEL_STATUS_READY" proc 5)
+                           (setq pid ghostel--pid)
+                           (if signal-p
+                               (signal-process pid 'TERM)
+                             (ghostel--write-pty ghostel--term "\n")))
+                         (ghostel-test--wait-until
+                          (lambda () (and calls (> legacy-calls 0))) proc 5)
+                         (let ((call (car calls)))
+                           (should (= 3 (length call)))
+                           (should (eq buf (nth 0 call)))
+                           (should (equal want (nth 2 call)))
+                           (when (eq backend 'native-pty)
+                             ;; The measurement behind the fix: the event
+                             ;; string alone cannot distinguish the cases.
+                             (should (equal "finished\n" (nth 1 call)))))
+                         (should (= 1 legacy-calls)))
+                     (ghostel-test-exec--kill-pid pid)
+                     (when (buffer-live-p buf)
+                       (ghostel-test--cleanup-exec-buffer buf))))))
+      (check-exit "printf GHOSTEL_STATUS_READY; read line; exit 0" 0 nil)
+      (check-exit "printf GHOSTEL_STATUS_READY; read line; exit 1" 1 nil)
+      (check-exit "printf GHOSTEL_STATUS_READY; while :; do sleep 1; done" 143 t))))
+
 (ert-deftest ghostel-test-exec-exit-hook-window-delete-keeps-origin-writable ()
   "An exit function deleting the selected window leaves other buffers alone.
 Deleting the selected window switches the current buffer; the sentinel's
